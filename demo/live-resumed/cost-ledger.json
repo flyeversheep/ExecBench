@@ -1,0 +1,51 @@
+{
+  "source": "Unique request hashes in the local response cache, including previous attempts and unfinished episodes.",
+  "caveat": "Estimates, not an invoice. Cache-adjusted totals use reported cached-token counts and explicitly supplied rates; missing rates use full input prices. Interrupted or duplicate in-flight requests may be omitted.",
+  "prices_usd_per_million": {
+    "glm-5.1": {
+      "input": 1.4,
+      "output": 4.4
+    },
+    "glm-5": {
+      "input": 1.0,
+      "output": 3.2
+    },
+    "glm-4.7": {
+      "input": 0.6,
+      "output": 2.2
+    }
+  },
+  "cached_input_prices_usd_per_million": {
+    "glm-5.1": 0.26,
+    "glm-5": 0.2,
+    "glm-4.7": 0.11
+  },
+  "models": {
+    "glm-5": {
+      "unique_cached_responses": 1026,
+      "input_tokens": 16632053,
+      "output_tokens": 220992,
+      "provider_cached_input_tokens": 6950528,
+      "full_input_price_estimate_usd": 17.33922739999999,
+      "cache_adjusted_estimate_usd": 11.778805000000014
+    },
+    "glm-5.1": {
+      "unique_cached_responses": 1412,
+      "input_tokens": 27525407,
+      "output_tokens": 120744,
+      "provider_cached_input_tokens": 8691712,
+      "full_input_price_estimate_usd": 39.066843400000025,
+      "cache_adjusted_estimate_usd": 29.158291719999994
+    },
+    "glm-4.7": {
+      "unique_cached_responses": 830,
+      "input_tokens": 8240951,
+      "output_tokens": 111647,
+      "provider_cached_input_tokens": 4770176,
+      "full_input_price_estimate_usd": 5.190194,
+      "cache_adjusted_estimate_usd": 2.8528077600000015
+    }
+  },
+  "total_full_input_price_estimate_usd": 61.596264800000014,
+  "total_cache_adjusted_estimate_usd": 43.78990448000001
+}

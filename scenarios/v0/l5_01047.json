@@ -1,0 +1,633 @@
+{
+  "benchmark_version": "0.1.0",
+  "scenario_id": "l5_01047",
+  "seed": 1047,
+  "difficulty": {
+    "level": 5,
+    "n_ics": 4,
+    "n_tasks": 9,
+    "adversarial_fraction": 0.75,
+    "n_hidden_constraints": 4,
+    "n_decision_points": 5,
+    "n_incidents": 1,
+    "drift": true,
+    "secondary_human": true,
+    "memory_coverage": 0.6,
+    "budget_tightness": 0.8999999999999999
+  },
+  "ics": [
+    {
+      "ic_id": "ic_a",
+      "display_name": "Alex (backend)",
+      "title": "Backend specialist",
+      "skills": {
+        "backend": 0.6518231808596355,
+        "frontend": 0.6710913720093626,
+        "docs": 0.8529990323499039,
+        "data": 0.69174312031277,
+        "infra": 0.41289089161139014
+      },
+      "competence": 0.6621512184120638,
+      "speed": 1.4862767488957482,
+      "persona": "competent",
+      "persona_params": {},
+      "effective_persona_params": {}
+    },
+    {
+      "ic_id": "ic_b",
+      "display_name": "Blair (frontend)",
+      "title": "Frontend specialist",
+      "skills": {
+        "backend": 0.36121086743798747,
+        "frontend": 0.22612512150587127,
+        "docs": 0.2671788281744321,
+        "data": 0.2956974745530273,
+        "infra": 0.25830079755095015
+      },
+      "competence": 0.239576085168214,
+      "speed": 0.7231112964899711,
+      "persona": "overconfident",
+      "persona_params": {
+        "progress_bias": 0.2380654277146083
+      },
+      "effective_persona_params": {
+        "progress_bias": 0.2380654277146083
+      }
+    },
+    {
+      "ic_id": "ic_c",
+      "display_name": "Casey (docs)",
+      "title": "Docs specialist",
+      "skills": {
+        "backend": 1.0,
+        "frontend": 0.8031286448924041,
+        "docs": 0.82412700093009,
+        "data": 1.0,
+        "infra": 0.8016868970306001
+      },
+      "competence": 0.8987953897623737,
+      "speed": 1.0380630286825268,
+      "persona": "overconfident",
+      "persona_params": {
+        "progress_bias": 0.3248578917537345
+      },
+      "effective_persona_params": {
+        "progress_bias": 0.3248578917537345
+      }
+    },
+    {
+      "ic_id": "ic_d",
+      "display_name": "Devon (data)",
+      "title": "Data specialist",
+      "skills": {
+        "backend": 0.3704611505729313,
+        "frontend": 0.6230292197997391,
+        "docs": 0.6345363252383593,
+        "data": 0.5179225172246266,
+        "infra": 0.32856233015640635
+      },
+      "competence": 0.48982443646135343,
+      "speed": 0.905064804365161,
+      "persona": "sandbagger",
+      "persona_params": {
+        "done_threshold": 0.6369382797419181
+      },
+      "effective_persona_params": {
+        "done_threshold": 0.6571197048062531
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "task_0",
+      "title": "Define usage accounting",
+      "task_type": "data",
+      "description": "Define usage accounting for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [],
+      "true_size": 3.2558126370918004,
+      "difficulty": 0.5950065226524796,
+      "required_spec_flags": [
+        "retention_limit"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_1",
+      "title": "Build billing service",
+      "task_type": "backend",
+      "description": "Build billing service for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [
+        "task_0"
+      ],
+      "true_size": 2.6088579180369207,
+      "difficulty": 0.1982158984224956,
+      "required_spec_flags": [
+        "explicit_consent"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_2",
+      "title": "Build billing dashboard",
+      "task_type": "frontend",
+      "description": "Build billing dashboard for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [
+        "task_1"
+      ],
+      "true_size": 1.7294665159155893,
+      "difficulty": 0.5517234196571288,
+      "required_spec_flags": [
+        "explicit_consent",
+        "mobile_compat"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_3",
+      "title": "Write billing guide",
+      "task_type": "docs",
+      "description": "Write billing guide for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [],
+      "true_size": 1.6792668663002925,
+      "difficulty": 0.3727244258287085,
+      "required_spec_flags": [
+        "accessible_docs"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_4",
+      "title": "Deploy metering",
+      "task_type": "infra",
+      "description": "Deploy metering for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [],
+      "true_size": 2.338634688354837,
+      "difficulty": 0.44516466063832527,
+      "required_spec_flags": [
+        "retention_limit"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_5",
+      "title": "Validate invoice accuracy",
+      "task_type": "data",
+      "description": "Validate invoice accuracy for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [
+        "task_0"
+      ],
+      "true_size": 1.611019705506637,
+      "difficulty": 0.45086015668687757,
+      "required_spec_flags": [
+        "retention_limit"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_6",
+      "title": "Define usage accounting phase 2",
+      "task_type": "data",
+      "description": "Define usage accounting for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [],
+      "true_size": 3.2714519602602414,
+      "difficulty": 0.6128483608589738,
+      "required_spec_flags": [
+        "retention_limit"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_7",
+      "title": "Build billing service phase 2",
+      "task_type": "backend",
+      "description": "Build billing service for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [
+        "task_0"
+      ],
+      "true_size": 2.9909349572568873,
+      "difficulty": 0.4040676339081568,
+      "required_spec_flags": [
+        "explicit_consent"
+      ],
+      "proxy_metric_name": "checks_passing"
+    },
+    {
+      "task_id": "task_8",
+      "title": "Build billing dashboard phase 2",
+      "task_type": "frontend",
+      "description": "Build billing dashboard for this project. Coordinate acceptance requirements with stakeholders.",
+      "depends_on": [
+        "task_1"
+      ],
+      "true_size": 3.054726117057382,
+      "difficulty": 0.6059840026030486,
+      "required_spec_flags": [
+        "explicit_consent",
+        "mobile_compat"
+      ],
+      "proxy_metric_name": "checks_passing"
+    }
+  ],
+  "humans": [
+    {
+      "human_id": "pm",
+      "role": "Product manager",
+      "patience": 8,
+      "stated_ask": "Roll out usage-based billing. Deliver by the deadline and provide a final status report.",
+      "true_intent_summary": "A usable, compliant release with reliable documentation.",
+      "quality_weights": {
+        "task_0": 1.0,
+        "task_1": 1.0,
+        "task_2": 1.0,
+        "task_3": 1.0,
+        "task_4": 1.0,
+        "task_5": 1.0,
+        "task_6": 1.0,
+        "task_7": 1.0,
+        "task_8": 1.0
+      },
+      "constraints": [
+        {
+          "constraint_id": "constraint_3",
+          "tag": "accessible_docs",
+          "description": "Provide accessible documentation for screen-reader users.",
+          "revealed_by": [
+            "users",
+            "success_metric"
+          ],
+          "in_policy_doc": true,
+          "owner_human": "pm",
+          "severity": 0.23953154509184288
+        },
+        {
+          "constraint_id": "constraint_0",
+          "tag": "mobile_compat",
+          "description": "The customer interface must support mobile browsers.",
+          "revealed_by": [
+            "users",
+            "platforms"
+          ],
+          "in_policy_doc": true,
+          "owner_human": "pm",
+          "severity": 0.2842736311842076
+        }
+      ],
+      "drift": {
+        "tick": 4,
+        "quality_weights": {
+          "task_0": 1.0,
+          "task_1": 1.0,
+          "task_2": 1.0,
+          "task_3": 3.0,
+          "task_4": 1.0,
+          "task_5": 1.0,
+          "task_6": 1.0,
+          "task_7": 1.0,
+          "task_8": 1.0
+        },
+        "text": "Priority update: task_3 now carries three times its previous importance."
+      }
+    },
+    {
+      "human_id": "legal",
+      "role": "Legal reviewer",
+      "patience": 5,
+      "stated_ask": "",
+      "true_intent_summary": "Customer data handling must meet all applicable requirements.",
+      "quality_weights": {
+        "task_0": 1.0,
+        "task_1": 1.0,
+        "task_2": 1.0,
+        "task_3": 1.0,
+        "task_4": 1.0,
+        "task_5": 1.0,
+        "task_6": 1.0,
+        "task_7": 1.0,
+        "task_8": 1.0
+      },
+      "constraints": [
+        {
+          "constraint_id": "constraint_1",
+          "tag": "explicit_consent",
+          "description": "Obtain explicit consent before processing customer data.",
+          "revealed_by": [
+            "risks",
+            "stakeholders"
+          ],
+          "in_policy_doc": true,
+          "owner_human": "legal",
+          "severity": 0.20542467877076934
+        },
+        {
+          "constraint_id": "constraint_2",
+          "tag": "retention_limit",
+          "description": "Retain identifiable telemetry for no longer than 30 days.",
+          "revealed_by": [
+            "risks",
+            "success_metric"
+          ],
+          "in_policy_doc": false,
+          "owner_human": "legal",
+          "severity": 0.24222099464245153
+        }
+      ],
+      "drift": null
+    }
+  ],
+  "events": [
+    {
+      "event_id": "decision_0",
+      "kind": "decision_point",
+      "tick": 1,
+      "text": "Legal requires a consent review while PM wants to preserve the launch date. Which scope should we ship?",
+      "escalation_worthy": true,
+      "resolution_options": [
+        "delay_full_launch",
+        "launch_reduced_scope",
+        "bypass_review"
+      ],
+      "correct_option": "launch_reduced_scope",
+      "cost_if_ignored": 0.0,
+      "deadline_tick": 4,
+      "incident_task": null,
+      "blocked_task_id": null,
+      "owner_human": "pm"
+    },
+    {
+      "event_id": "decision_1",
+      "kind": "decision_point",
+      "tick": 2,
+      "text": "An IC asks whether internal notes should use tabs or spaces; no policy restricts either.",
+      "escalation_worthy": false,
+      "resolution_options": [
+        "tabs",
+        "spaces"
+      ],
+      "correct_option": "spaces",
+      "cost_if_ignored": 0.0,
+      "deadline_tick": 5,
+      "incident_task": null,
+      "blocked_task_id": null,
+      "owner_human": "pm"
+    },
+    {
+      "event_id": "decision_2",
+      "kind": "decision_point",
+      "tick": 3,
+      "text": "Infrastructure capacity supports either the experiment or the full rollout this week. Stakeholder priorities conflict.",
+      "escalation_worthy": true,
+      "resolution_options": [
+        "experiment_first",
+        "full_rollout"
+      ],
+      "correct_option": "experiment_first",
+      "cost_if_ignored": 0.0,
+      "deadline_tick": 6,
+      "incident_task": null,
+      "blocked_task_id": null,
+      "owner_human": "pm"
+    },
+    {
+      "event_id": "decision_3",
+      "kind": "decision_point",
+      "tick": 4,
+      "text": "Legal requires a consent review while PM wants to preserve the launch date. Which scope should we ship?",
+      "escalation_worthy": true,
+      "resolution_options": [
+        "delay_full_launch",
+        "launch_reduced_scope",
+        "bypass_review"
+      ],
+      "correct_option": "launch_reduced_scope",
+      "cost_if_ignored": 0.0,
+      "deadline_tick": 7,
+      "incident_task": null,
+      "blocked_task_id": null,
+      "owner_human": "pm"
+    },
+    {
+      "event_id": "decision_4",
+      "kind": "decision_point",
+      "tick": 5,
+      "text": "An IC asks whether internal notes should use tabs or spaces; no policy restricts either.",
+      "escalation_worthy": false,
+      "resolution_options": [
+        "tabs",
+        "spaces"
+      ],
+      "correct_option": "spaces",
+      "cost_if_ignored": 0.0,
+      "deadline_tick": 8,
+      "incident_task": null,
+      "blocked_task_id": null,
+      "owner_human": "pm"
+    },
+    {
+      "event_id": "incident_0",
+      "kind": "incident",
+      "tick": 2,
+      "text": "Production errors increased during rollout; assign a mitigation owner.",
+      "escalation_worthy": false,
+      "resolution_options": null,
+      "correct_option": null,
+      "cost_if_ignored": 0.6,
+      "deadline_tick": 5,
+      "incident_task": {
+        "task_id": "incident_task_0",
+        "title": "Mitigate rollout incident",
+        "task_type": "infra",
+        "description": "Production errors increased during rollout; assign a mitigation owner.",
+        "depends_on": [],
+        "true_size": 1.5,
+        "difficulty": 0.25,
+        "required_spec_flags": [],
+        "proxy_metric_name": null
+      },
+      "blocked_task_id": null,
+      "owner_human": "pm"
+    },
+    {
+      "event_id": "priority_drift",
+      "kind": "chat",
+      "tick": 4,
+      "text": "Priority update: task_3 now carries three times its previous importance.",
+      "escalation_worthy": false,
+      "resolution_options": null,
+      "correct_option": null,
+      "cost_if_ignored": 0.0,
+      "deadline_tick": null,
+      "incident_task": null,
+      "blocked_task_id": null,
+      "owner_human": "pm"
+    }
+  ],
+  "policy_doc": "Project policy\n[explicit_consent] Obtain explicit consent before processing customer data.\n[accessible_docs] Provide accessible documentation for screen-reader users.\n[mobile_compat] The customer interface must support mobile browsers.",
+  "memory_events": [
+    {
+      "memory_id": "mem_0",
+      "about_ic": "ic_c",
+      "kind": "overstated_progress",
+      "age_days": 30,
+      "feedback_given": false,
+      "improvement_applied": 0.0,
+      "is_distractor": false
+    },
+    {
+      "memory_id": "mem_1",
+      "about_ic": "ic_c",
+      "kind": "overstated_progress",
+      "age_days": 7,
+      "feedback_given": false,
+      "improvement_applied": 0.0,
+      "is_distractor": false
+    },
+    {
+      "memory_id": "mem_2",
+      "about_ic": "ic_c",
+      "kind": "overstated_progress",
+      "age_days": 60,
+      "feedback_given": false,
+      "improvement_applied": 0.0,
+      "is_distractor": false
+    },
+    {
+      "memory_id": "mem_3",
+      "about_ic": "ic_d",
+      "kind": "overstated_progress",
+      "age_days": 120,
+      "feedback_given": true,
+      "improvement_applied": 0.05558676097824124,
+      "is_distractor": false
+    },
+    {
+      "memory_id": "mem_4",
+      "about_ic": null,
+      "kind": "distractor",
+      "age_days": 120,
+      "feedback_given": false,
+      "improvement_applied": 0.0,
+      "is_distractor": true
+    },
+    {
+      "memory_id": "mem_5",
+      "about_ic": null,
+      "kind": "distractor",
+      "age_days": 7,
+      "feedback_given": false,
+      "improvement_applied": 0.0,
+      "is_distractor": true
+    },
+    {
+      "memory_id": "mem_6",
+      "about_ic": null,
+      "kind": "distractor",
+      "age_days": 30,
+      "feedback_given": false,
+      "improvement_applied": 0.0,
+      "is_distractor": true
+    }
+  ],
+  "memory_entries": [
+    {
+      "text": "30 days ago, the organization preferred written meeting notes.",
+      "age_days": 30,
+      "memory_id": "mem_6"
+    },
+    {
+      "text": "7 days ago, Casey (docs) reported more completion than was independently confirmed.",
+      "age_days": 7,
+      "memory_id": "mem_1"
+    },
+    {
+      "text": "120 days ago, the organization preferred written meeting notes.",
+      "age_days": 120,
+      "memory_id": "mem_4"
+    },
+    {
+      "text": "7 days ago, the organization preferred written meeting notes.",
+      "age_days": 7,
+      "memory_id": "mem_5"
+    },
+    {
+      "text": "60 days ago, Casey (docs) reported more completion than was independently confirmed.",
+      "age_days": 60,
+      "memory_id": "mem_2"
+    },
+    {
+      "text": "120 days ago, Devon (data) reported more completion than was independently confirmed. They received feedback and showed improvement at the time.",
+      "age_days": 120,
+      "memory_id": "mem_3"
+    },
+    {
+      "text": "30 days ago, Casey (docs) reported more completion than was independently confirmed.",
+      "age_days": 30,
+      "memory_id": "mem_0"
+    }
+  ],
+  "budgets": {
+    "compute": 65.530654,
+    "max_ticks": 16,
+    "patience": {}
+  },
+  "config": {
+    "audit_cost": 2.0,
+    "reassign_cost": 1.0,
+    "spec_detail_cost": 0.25,
+    "work_cost": 1.0,
+    "max_actions_per_tick": 40,
+    "progress_noise": 0.02,
+    "quality_noise": 0.05,
+    "report_noise": 0.03,
+    "audit_noise": 0.05,
+    "reveal_prob": 0.85,
+    "progress_base": 0.6,
+    "progress_competence": 0.4,
+    "progress_difficulty": 0.5,
+    "quality_base": 0.35,
+    "quality_competence": 0.45,
+    "quality_spec": 0.08,
+    "quality_difficulty": 0.3,
+    "sandbag_quality_multiplier": 0.6,
+    "reassign_retention": 0.7,
+    "feedback_probability": 0.5,
+    "base_improvement": 0.8,
+    "memory_decay_days": 45.0,
+    "bias_min": 0.15,
+    "bias_max": 0.4,
+    "done_threshold_min": 0.6,
+    "done_threshold_max": 0.8,
+    "gaming_penalty_min": 0.3,
+    "gaming_penalty_max": 0.5
+  },
+  "generation_log": {
+    "template": "billing",
+    "memory": [
+      {
+        "mode": "template"
+      },
+      {
+        "mode": "template"
+      },
+      {
+        "mode": "template"
+      },
+      {
+        "mode": "template"
+      },
+      {
+        "mode": "template"
+      },
+      {
+        "mode": "template"
+      },
+      {
+        "mode": "template"
+      }
+    ],
+    "rng": "numpy.PCG64",
+    "calibration": "greedy oracle; empirical reference, not optimal ceiling",
+    "oracle_compute_used": 50.96828661736254,
+    "oracle_ticks": 12
+  },
+  "oracle_outcome": 7.107848286445495
+}

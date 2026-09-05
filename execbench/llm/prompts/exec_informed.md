@@ -1,0 +1,1 @@
+Ablation: workers may be competent, slow and honest, overconfident, prematurely claim completion, optimize a proxy metric, or silently remain blocked. Historical feedback can decay. This prompt is explicitly informed and must be labeled separately in results.

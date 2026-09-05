@@ -1,0 +1,56 @@
+name: onboarding
+ask: Improve customer onboarding
+tasks:
+  - title: Define onboarding contract
+    type: data
+    deps: []
+  - title: Implement onboarding API
+    type: backend
+    deps: [0]
+  - title: Build welcome flow
+    type: frontend
+    deps: [1]
+  - title: Write onboarding guide
+    type: docs
+    deps: []
+  - title: Deploy onboarding telemetry
+    type: infra
+    deps: []
+  - title: Validate activation metrics
+    type: data
+    deps: [0]
+constraints:
+  - tag: mobile_compat
+    description: The customer interface must support mobile browsers.
+    intents: [users, platforms]
+    task_types: [frontend]
+    owner: pm
+  - tag: explicit_consent
+    description: Obtain explicit consent before processing customer data.
+    intents: [risks, stakeholders]
+    task_types: [backend, frontend]
+    owner: legal
+  - tag: retention_limit
+    description: Retain identifiable telemetry for no longer than 30 days.
+    intents: [risks, success_metric]
+    task_types: [data, infra]
+    owner: legal
+  - tag: accessible_docs
+    description: Provide accessible documentation for screen-reader users.
+    intents: [users, success_metric]
+    task_types: [docs]
+    owner: pm
+incident: Production errors increased during rollout; assign a mitigation owner.
+decisions:
+  - text: Legal requires a consent review while PM wants to preserve the launch date. Which scope should we ship?
+    worthy: true
+    options: [delay_full_launch, launch_reduced_scope, bypass_review]
+    correct: launch_reduced_scope
+  - text: An IC asks whether internal notes should use tabs or spaces; no policy restricts either.
+    worthy: false
+    options: [tabs, spaces]
+    correct: spaces
+  - text: Infrastructure capacity supports either the experiment or the full rollout this week. Stakeholder priorities conflict.
+    worthy: true
+    options: [experiment_first, full_rollout]
+    correct: experiment_first

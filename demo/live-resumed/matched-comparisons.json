@@ -1,0 +1,139 @@
+[
+  {
+    "comparison": "All seven policies: 15 shared scenarios (9 at difficulty 1, 5 at difficulty 2, 1 at difficulty 3)",
+    "scenario_ids": [
+      "l1_01000",
+      "l1_01001",
+      "l1_01003",
+      "l1_01004",
+      "l1_01005",
+      "l1_01006",
+      "l1_01007",
+      "l1_01008",
+      "l1_01009",
+      "l2_01010",
+      "l2_01011",
+      "l2_01012",
+      "l2_01014",
+      "l2_01017",
+      "l3_01021"
+    ],
+    "means": {
+      "glm-5": {
+        "outcome": 0.8939927825729129,
+        "escalation_f1": 0.8755555555555555,
+        "detection_rate": 0.26666666666666666,
+        "compute_fraction": 0.8815154009097029
+      },
+      "glm-5.1": {
+        "outcome": 0.8155248109337149,
+        "escalation_f1": 0.8755555555555555,
+        "detection_rate": 0.1,
+        "compute_fraction": 0.6969776446982738
+      },
+      "glm-4.7": {
+        "outcome": 0.7931675312984269,
+        "escalation_f1": 0.6666666666666666,
+        "detection_rate": 0.13333333333333333,
+        "compute_fraction": 0.6286838127005234
+      },
+      "heuristic": {
+        "outcome": 0.5777766435663297,
+        "escalation_f1": 0.8755555555555555,
+        "detection_rate": 0.26666666666666666,
+        "compute_fraction": 0.9875142869765149
+      },
+      "trust_all": {
+        "outcome": 0.7060148651078267,
+        "escalation_f1": 0.0,
+        "detection_rate": 0.0,
+        "compute_fraction": 0.5823302093245472
+      },
+      "audit_all": {
+        "outcome": 0.3867358004168925,
+        "escalation_f1": 0.0,
+        "detection_rate": 0.26666666666666666,
+        "compute_fraction": 0.9924235339611845
+      },
+      "oracle": {
+        "outcome": 1.0,
+        "escalation_f1": 1.0,
+        "detection_rate": 0.0,
+        "compute_fraction": 0.6507070701457258
+      }
+    }
+  },
+  {
+    "comparison": "GLM-5 versus GLM-5.1 and baselines: 30 shared scenarios (10 each at difficulties 1\u20133)",
+    "scenario_ids": [
+      "l1_01000",
+      "l1_01001",
+      "l1_01002",
+      "l1_01003",
+      "l1_01004",
+      "l1_01005",
+      "l1_01006",
+      "l1_01007",
+      "l1_01008",
+      "l1_01009",
+      "l2_01010",
+      "l2_01011",
+      "l2_01012",
+      "l2_01013",
+      "l2_01014",
+      "l2_01015",
+      "l2_01016",
+      "l2_01017",
+      "l2_01018",
+      "l2_01019",
+      "l3_01020",
+      "l3_01021",
+      "l3_01022",
+      "l3_01023",
+      "l3_01024",
+      "l3_01025",
+      "l3_01026",
+      "l3_01027",
+      "l3_01028",
+      "l3_01029"
+    ],
+    "means": {
+      "glm-5": {
+        "outcome": 0.8640362998285431,
+        "escalation_f1": 0.8222222222222222,
+        "detection_rate": 0.38333333333333336,
+        "compute_fraction": 0.8589167350463993
+      },
+      "glm-5.1": {
+        "outcome": 0.7738680982637431,
+        "escalation_f1": 0.8222222222222222,
+        "detection_rate": 0.18333333333333332,
+        "compute_fraction": 0.7457359487246304
+      },
+      "heuristic": {
+        "outcome": 0.5767922122982662,
+        "escalation_f1": 0.8222222222222222,
+        "detection_rate": 0.5,
+        "compute_fraction": 0.9902103458568685
+      },
+      "trust_all": {
+        "outcome": 0.6252017646445505,
+        "escalation_f1": 0.0,
+        "detection_rate": 0.0,
+        "compute_fraction": 0.5951077290186506
+      },
+      "audit_all": {
+        "outcome": 0.36398125093182393,
+        "escalation_f1": 0.0,
+        "detection_rate": 0.38333333333333336,
+        "compute_fraction": 0.9934828664798513
+      },
+      "oracle": {
+        "outcome": 1.0,
+        "escalation_f1": 1.0,
+        "detection_rate": 0.0,
+        "compute_fraction": 0.6676767674728109
+      }
+    }
+  }
+]

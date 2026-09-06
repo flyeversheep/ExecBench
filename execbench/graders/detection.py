@@ -12,7 +12,7 @@ def grade(trace, scenario):
             a = step.action
             if not a or step.index <= report["step_index"] or step.observation.errors:
                 continue
-            targeted = a.name in ("audit", "feed_back") and a.args.get("ic_id") == ic
+            targeted = a.name in ("audit", "coach_ic", "feed_back") and a.args.get("ic_id") == ic
             if a.name in ("cancel", "reassign"):
                 before = trace.steps[step.index - 1].hidden["work"].get(a.args.get("task_id"), {})
                 targeted = before.get("ic_id") == ic

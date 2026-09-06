@@ -312,11 +312,14 @@ class ExecEnv:
         self.resolutions[event_id] = {"option": option, "source": "human", "tick": self.tick}
         return {"event_id": event_id, "option": option}
 
-    def _feed_back(self, ic_id, text):
+    def _coach_ic(self, ic_id, text):
         if ic_id not in self.feedback_eligible:
-            raise ValueError("feedback requires a claimed-done or cancelled task")
+            raise ValueError(
+                "feedback requires a claimed-done or cancelled task; coach_ic records IC coaching "
+                "only and cannot send task instructions or change requirements"
+            )
         self.feedback.append({"ic_id": ic_id, "text": text, "tick": self.tick, "step_index": len(self.steps)})
-        return {"recorded": True}
+        return {"recorded": True, "effect": "coaching_recorded_only", "task_state_changed": False}
 
     def _report(self, text):
         self.final_report = text

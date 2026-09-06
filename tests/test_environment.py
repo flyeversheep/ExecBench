@@ -1,3 +1,4 @@
+import copy
 import json
 
 import pytest
@@ -177,12 +178,41 @@ def test_reassign_cancel_feedback(scenario):
     assign(e)
     act(e, "wait")
     old = e.work["t0"].progress
-    assert act(e, "feed_back", ic_id="ic_0", text="Improve").errors
+    assert act(e, "coach_ic", ic_id="ic_0", text="Improve").errors
     act(e, "reassign", task_id="t0", new_ic_id="ic_1")
     assert e.work["t0"].progress == pytest.approx(old * 0.7)
     act(e, "cancel", task_id="t0")
-    assert not act(e, "feed_back", ic_id="ic_1", text="Improve").errors
+    assert not act(e, "coach_ic", ic_id="ic_1", text="Improve").errors
     assert e.feedback
+
+
+@pytest.mark.parametrize("eligible", [False, True])
+def test_feedback_cannot_update_work_or_adapt_ic(scenario, eligible):
+    e = ExecEnv(scenario)
+    assign(e)
+    if eligible:
+        for _ in range(3):
+            act(e, "wait")
+        assert "ic_0" in e.feedback_eligible
+    control = copy.deepcopy(e)
+    text = "Incorporate explicit consent and retention_limit into the deliverable."
+    result = act(e, "coach_ic", ic_id="ic_0", text=text)
+    if eligible:
+        assert result.action_result == {
+            "recorded": True, "effect": "coaching_recorded_only", "task_state_changed": False,
+        }
+        assert e.feedback[-1]["text"] == text
+    else:
+        assert "coach_ic records IC coaching only" in result.errors[0]
+        assert not e.feedback
+    assert e.work == control.work
+    assert e.ics == control.ics
+    assert e.tick == control.tick
+    # Recorded prose must not affect subsequent simulated work either.
+    act(e, "wait")
+    act(control, "wait")
+    assert e.work == control.work
+    assert e.ics == control.ics
 
 
 def test_spam_guard_and_deadline(scenario):

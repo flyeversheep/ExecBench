@@ -81,7 +81,7 @@ def render_trace(trace, output):
         corrective = False
         if (
             step.action
-            and step.action.name in ("audit", "reassign", "cancel", "feed_back")
+            and step.action.name in ("audit", "reassign", "cancel", "coach_ic", "feed_back")
             and not step.observation.errors
         ):
             target = step.action.args.get("ic_id")

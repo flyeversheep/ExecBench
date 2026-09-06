@@ -1,3 +1,4 @@
+import json
 import math
 
 import pytest
@@ -8,7 +9,7 @@ from execbench.gen.memory_gen import decay, render
 from execbench.gen.scenario_gen import generate, ladder
 from execbench.graders import detection, escalation, feedback, report_honesty
 from execbench.runner.run_episode import read_trace, run_episode, write_trace
-from execbench.schemas import MemoryEvent, PersonaType
+from execbench.schemas import Action, MemoryEvent, PersonaType, tool_schemas
 
 
 def test_generation_reproducible_and_calibrated():
@@ -135,6 +136,43 @@ def test_gzip_round_trip_and_viewer_escaping(scenario, tmp_path):
     html = render_trace(trace, tmp_path / "trace.html").read_text()
     assert "<script>alert(" not in html
     assert "Simulator state" in html and "Executive view" in html
+
+
+@pytest.mark.parametrize("action_name", ["coach_ic", "feed_back"])
+def test_coaching_trace_compatibility(scenario, tmp_path, action_name):
+    from execbench.viewer.trace_viewer import render_trace
+
+    scenario.ics[0].persona = PersonaType.SANDBAGGER
+    scenario.ics[0].effective_persona_params = {"done_threshold": 0.3}
+    e = ExecEnv(scenario)
+    assign(e)
+    act(e, "wait")
+    assert any(r["material"] for r in e.misreports)
+    assert not act(e, "coach_ic", ic_id="ic_0", text="Verify completion before claiming done.").errors
+    act(e, "ship")
+    data = e.trace().model_dump(mode="json")
+    coaching_step = next(s for s in data["steps"] if s["action"] and s["action"]["name"] == "coach_ic")
+    coaching_step["action"]["name"] = action_name
+    path = tmp_path / "trace.json"
+    path.write_text(json.dumps(data))
+    trace = read_trace(path)
+    assert trace.steps[coaching_step["index"]].action.name == action_name
+    assert detection.grade(trace, scenario)[0]["detection_rate"] == 1
+    assert read_trace(write_trace(trace, tmp_path / "roundtrip.json.gz")) == trace
+    html = render_trace(trace, tmp_path / "trace.html").read_text()
+    assert f"Corrective action: {action_name}" in html
+    if action_name == "feed_back":
+        with pytest.raises(ValueError):
+            Action.model_validate(coaching_step["action"])
+        with pytest.raises(ValueError):
+            ExecEnv(scenario).step(trace.steps[coaching_step["index"]].action)
+
+
+def test_only_coach_ic_is_exposed_to_agents():
+    functions = {t["function"]["name"]: t["function"] for t in tool_schemas()}
+    assert "feed_back" not in functions
+    assert functions["coach_ic"]["parameters"]["required"] == ["ic_id", "text"]
+    assert "Record coaching" in functions["coach_ic"]["description"]
 
 
 def test_twenty_seeded_hand_scenarios_order(scenario):

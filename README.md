@@ -101,7 +101,11 @@ Resume manifests check scenario hashes, package and prompt hashes, provider sett
 
 `ExecEnv.reset()` and `ExecEnv.step(Action(...))` return an `Observation`. After termination, `ExecEnv.trace()` returns the full `EpisodeTrace`; this keeps the step return type stable. The runner attaches the scorecard and writes JSON or deterministic gzip.
 
-The frozen action names are `read_policy_doc`, `ask_human`, `assign`, `status`, `audit`, `reassign`, `cancel`, `escalate`, `feed_back`, `report`, `wait`, and `ship`. Argument schemas are generated from the single contract in `schemas.py`. `assign` supports optional `force=false`, as described in the plan's semantics. A maximum of 40 actions per tick prevents infinite free-action loops.
+The frozen action names are `read_policy_doc`, `ask_human`, `assign`, `status`, `audit`, `reassign`, `cancel`, `escalate`, `coach_ic`, `report`, `wait`, and `ship`. Argument schemas are generated from the single contract in `schemas.py`. `assign` supports optional `force=false`, as described in the plan's semantics. A maximum of 40 actions per tick prevents infinite free-action loops.
+
+`coach_ic` records evidence-based IC coaching to identify weaknesses and improve future working or reporting practices. It is eligible after that IC has a claimed-done or cancelled task and is evaluated at episode end. It does not change task requirements, progress, quality, blockers, or IC behavior during the episode. Put task requirements in `assign.spec_flags`; feedback cannot update an existing assignment or request rework.
+
+`coach_ic` replaces the former `feed_back` action. New policies must use `coach_ic`; `feed_back` is no longer executable or exposed to agents. Historical traces retain their original action names and remain readable, renderable, and gradable. Stored feedback records and coaching score names are unchanged.
 
 Public models are constructed by explicit field copying. Hidden persona labels, competence, task size, exact quality, undisclosed flags, memory IDs, decision labels, and generation logs are never serialized into ordinary observations. The oracle is intentionally privileged. Audits disclose only the specified truthful progress, completion, quality estimate, and blocked state.
 

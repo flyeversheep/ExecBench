@@ -189,7 +189,7 @@ class Random(TrustAll):
             if (ic.last_status or {}).get("claims_done"):
                 actions.append(
                     Action(
-                        name="feed_back",
+                        name="coach_ic",
                         args={"ic_id": ic.ic_id, "text": "Please verify completion before reporting."},
                     )
                 )

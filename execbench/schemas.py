@@ -240,7 +240,7 @@ class Action(Model):
         "reassign",
         "cancel",
         "escalate",
-        "feed_back",
+        "coach_ic",
         "report",
         "wait",
         "ship",
@@ -249,6 +249,16 @@ class Action(Model):
 
 
 # Frozen tool contract, including the force switch described in the plan's assign semantics.
+COACH_IC_DESCRIPTION = (
+    "Record coaching to help an IC identify observed weaknesses and improve their future working "
+    "or reporting practices. Ground feedback in observed behavior and give actionable advice. "
+    "Allowed only after that IC has at least one claimed-done or cancelled task. "
+    "This records feedback for end-of-episode evaluation only; it does not change task specifications, "
+    "progress, quality, blockers, or IC behavior in this episode. Do not use it to send task "
+    "instructions, add requirements, or request revisions. Task requirements belong in assign.spec_flags."
+)
+
+
 ARGS = {
     "read_policy_doc": {},
     "ask_human": {"human_id": "string", "question": "string"},
@@ -264,7 +274,7 @@ ARGS = {
     "reassign": {"task_id": "string", "new_ic_id": "string"},
     "cancel": {"task_id": "string"},
     "escalate": {"event_id": "string", "framing": "string"},
-    "feed_back": {"ic_id": "string", "text": "string"},
+    "coach_ic": {"ic_id": "string", "text": "string"},
     "report": {"text": "string"},
     "wait": {},
     "ship": {},
@@ -294,7 +304,8 @@ def tool_schemas():
                         "Read the complete static policy document and its documented constraints as "
                         "{tag, description} objects. The document may omit requirements; ask humans "
                         "for additional constraints. Reading costs no compute or patience."
-                        if name == "read_policy_doc" else name.replace("_", " ")
+                        if name == "read_policy_doc" else
+                        COACH_IC_DESCRIPTION if name == "coach_ic" else name.replace("_", " ")
                     ),
                     "parameters": {
                         "type": "object",
@@ -373,10 +384,17 @@ class Observation(Model):
     terminated: bool = False
 
 
+class LegacyFeedbackAction(Model):
+    """Read-only historical action; excluded from executable actions and tool schemas."""
+
+    name: Literal["feed_back"]
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
 class TraceStep(Model):
     index: int
     tick: int
-    action: Action | None
+    action: Action | LegacyFeedbackAction | None
     observation: Observation
     hidden: dict[str, Any]
     llm_calls: list[dict[str, Any]] = Field(default_factory=list)

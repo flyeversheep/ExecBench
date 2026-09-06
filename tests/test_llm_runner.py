@@ -50,6 +50,7 @@ def test_single_tool_request_and_cache(monkeypatch, tmp_path, provider):
     ([{"name": "audit", "args": {"ic_id": 5}}], "audit.ic_id: expected string"),
     ([{"name": "audit", "args": "not JSON"}], "args"),
     ([{"name": "unknown", "args": {}}], "name"),
+    ([{"name": "feed_back", "args": {"ic_id": "ic_0", "text": "Improve"}}], "name"),
     ([{"name": "assign", "args": {
         "ic_id": "ic_a", "task_id": "task_0", "spec_detail": 12, "spec_flags": [],
     }}], "assign.spec_detail: expected an integer from 0 to 3"),

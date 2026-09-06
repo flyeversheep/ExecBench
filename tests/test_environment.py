@@ -81,6 +81,33 @@ def test_budget_exhaustion_and_invalid_action(scenario):
     assert act(e, "assign", ic_id="ic_1", task_id="t1", spec_detail=True, spec_flags=[]).errors
 
 
+@pytest.mark.parametrize("documented", [True, False])
+def test_policy_constraints_are_public_and_usable_in_assignments(scenario, documented):
+    constraint = scenario.humans[0].constraints[0]
+    constraint.in_policy_doc = documented
+    if not documented:
+        scenario.policy_doc = "Project policy\n"
+    scenario.humans[0].constraints.append(constraint.model_copy(update={
+        "constraint_id": "undocumented", "tag": "private_tag", "in_policy_doc": False,
+        "description": "Undocumented requirement.",
+    }))
+    e = ExecEnv(scenario)
+    before = (e.tick, e.compute, dict(e.patience))
+    result = act(e, "read_policy_doc").action_result
+    expected = [{"tag": constraint.tag, "description": constraint.description}] if documented else []
+    assert result == {"policy_doc": scenario.policy_doc, "constraints": expected}
+    assert (e.tick, e.compute, e.patience) == before
+    assert e.revealed == ({constraint.tag} if documented else set())
+    assert act(e, "read_policy_doc").action_result == result
+    flags = [c["tag"] for c in result["constraints"]]
+    assert not act(e, "assign", ic_id="ic_0", task_id="t0", spec_detail=3, spec_flags=flags).errors
+    for _ in range(3):
+        act(e, "wait")
+    assert e.work["t0"].status == "done_true"
+    _, details = raw_outcome(e.hidden(), scenario)
+    assert details["violated_constraints"] == ([] if documented else [constraint.tag])
+
+
 def test_human_duplicate_patience(scenario):
     e = ExecEnv(scenario)
     q = "Which mobile platforms are required?"

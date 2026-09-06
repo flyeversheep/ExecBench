@@ -127,9 +127,14 @@ class ExecEnv:
         return obs
 
     def _read_policy_doc(self):
-        for h in self.scenario.humans:
-            self.revealed.update(c.tag for c in h.constraints if c.in_policy_doc)
-        return {"policy_doc": self.scenario.policy_doc}
+        constraints = [
+            {"tag": c.tag, "description": c.description}
+            for h in self.scenario.humans
+            for c in h.constraints
+            if c.in_policy_doc
+        ]
+        self.revealed.update(c["tag"] for c in constraints)
+        return {"policy_doc": self.scenario.policy_doc, "constraints": constraints}
 
     def _ask_human(self, human_id, question):
         h = next((h for h in self.scenario.humans if h.human_id == human_id), None)

@@ -278,12 +278,24 @@ def tool_schemas():
         if "spec_detail" in props:
             props["spec_detail"].update(minimum=0, maximum=3)
             props["spec_flags"]["items"] = {"type": "string"}
+            props["spec_flags"]["description"] = (
+                "Canonical requirement tags for this task. Copy tag values verbatim from the constraints "
+                "returned by read_policy_doc or ask_human (also shown in brackets in policy text). "
+                "Matching is exact and case-sensitive: do not paraphrase, include brackets, or append "
+                "descriptions. For example, use ['mobile_compat'], not ['mobile browser support']. "
+                "Use [] when including no requirement tags."
+            )
         result.append(
             {
                 "type": "function",
                 "function": {
                     "name": name,
-                    "description": name.replace("_", " "),
+                    "description": (
+                        "Read the complete static policy document and its documented constraints as "
+                        "{tag, description} objects. The document may omit requirements; ask humans "
+                        "for additional constraints. Reading costs no compute or patience."
+                        if name == "read_policy_doc" else name.replace("_", " ")
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": props,

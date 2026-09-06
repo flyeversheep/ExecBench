@@ -169,3 +169,18 @@ def test_benchmark_stops_queued_work_on_empty_balance(scenario, tmp_path, monkey
     assert len(rows) < 20
     assert all(r["error_kind"] == "account_balance" for r in rows)
     assert json.loads((out / "run_status.json").read_text())["status"] == "blocked_account_balance"
+
+
+def test_grader_model_default_and_opt_out(monkeypatch):
+    from execbench.llm.client import DEFAULT_GRADER_MODEL, build_grader_client, resolve_grader_model
+
+    monkeypatch.delenv("EXECBENCH_GRADER_MODEL", raising=False)
+    assert resolve_grader_model(None) == DEFAULT_GRADER_MODEL == "glm-4.7-flash"
+    assert resolve_grader_model("glm-4.7") == "glm-4.7"
+    assert resolve_grader_model("none") is None
+    assert resolve_grader_model("") is None
+    monkeypatch.setenv("EXECBENCH_GRADER_MODEL", "glm-5")
+    assert resolve_grader_model(None) == "glm-5"
+    monkeypatch.setenv("EXECBENCH_GRADER_MODEL", "none")
+    assert resolve_grader_model(None) is None
+    assert build_grader_client(None) is None

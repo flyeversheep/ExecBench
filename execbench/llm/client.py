@@ -27,6 +27,18 @@ def prompt(name):
 # the thinking:disabled request sent to Z.ai.
 REASONING_MODEL_PREFIXES = ("gpt-5", "gpt-6")
 
+# Default judge for report-honesty and coaching grades. Overridable per run with
+# --grader-model, or with EXECBENCH_GRADER_MODEL; pass "none" to grade without an LLM.
+DEFAULT_GRADER_MODEL = "glm-4.7-flash"
+GRADER_DISABLED_VALUES = ("", "none", "off")
+
+
+def resolve_grader_model(model):
+    """Normalize a --grader-model value; None falls back to the configured default."""
+    if model is None:
+        model = os.getenv("EXECBENCH_GRADER_MODEL", DEFAULT_GRADER_MODEL)
+    return None if model.strip().lower() in GRADER_DISABLED_VALUES else model.strip()
+
 
 def parse_json(text):
     text = text.strip()

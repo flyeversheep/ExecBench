@@ -134,6 +134,8 @@ class LLMClient:
         }
         if tools:
             request["tools"], request["tool_choice"] = tools, "required"
+            if self.provider != "anthropic":
+                request["parallel_tool_calls"] = False
         if self.provider == "anthropic":
             request["system"] = "\n".join(m["content"] for m in messages if m["role"] == "system")
             request["messages"] = [m for m in messages if m["role"] != "system"]
@@ -146,7 +148,7 @@ class LLMClient:
                     }
                     for t in tools
                 ]
-                request["tool_choice"] = {"type": "any"}
+                request["tool_choice"] = {"type": "any", "disable_parallel_tool_use": True}
         elif "api.z.ai" in self.base_url:
             if self.model.lower().startswith(Z_AI_FORCED_REASONING_PREFIXES):
                 request["reasoning_effort"] = "low"

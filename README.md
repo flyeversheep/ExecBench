@@ -70,6 +70,15 @@ Alternatively, `scripts/run_live_demo.py` performs API preflights, validates the
 
 The adapters use `httpx` directly, so provider SDKs are unnecessary. The Anthropic adapter uses its native [tool-use contract](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools).
 
+Tool requests enforce the one-action-per-turn contract: OpenAI-compatible requests send
+`tool_choice="required"` with `parallel_tool_calls=false`; Anthropic requests send
+`tool_choice={"type":"any","disable_parallel_tool_use":true}`. Responses are still validated
+locally in case a compatible endpoint ignores the setting. Rejected batches execute nothing;
+retries include the call count or argument error and do not advance the simulation. After three
+invalid responses, the existing forced-wait rule applies. These request settings are recorded in
+traces and included in cache keys. Compare the corrected interface using a new results directory;
+old benchmark results remain evidence of the previous interface.
+
 Token usage is always recorded. Dollar values are **estimates** based on explicitly configured prices; without prices, `llm_cost_known=0` and the leaderboard omits the dollar estimate. Provider cache discounts, tiered pricing, and taxes are not inferred. Local cache hits have zero additional API spend. Grader tokens and estimated spend are recorded separately. Check [current provider pricing](https://docs.z.ai/guides/overview/pricing) before populating price settings.
 
 ## Scenarios and reproducibility

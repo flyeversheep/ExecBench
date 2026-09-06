@@ -9,6 +9,92 @@ from execbench.policies.llm_policy import LLMPolicy
 from execbench.runner.leaderboard import leaderboard
 from execbench.runner.run_benchmark import run_benchmark
 from execbench.runner.run_episode import run_episode
+from execbench.schemas import tool_schemas
+
+
+@pytest.mark.parametrize("provider", ["openai", "anthropic"])
+def test_single_tool_request_and_cache(monkeypatch, tmp_path, provider):
+    requests = []
+
+    def post(url, **kwargs):
+        requests.append(kwargs["json"])
+        return httpx.Response(200, json=(
+            {"content": [{"type": "text", "text": "ok"}]}
+            if provider == "anthropic" else {"choices": [{"message": {"content": "ok"}}]}
+        ))
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("model", provider=provider, api_key="test", cache_dir=tmp_path)
+    messages = [{"role": "user", "content": "go"}]
+    client.complete(messages)
+    result = client.complete(messages, tools=tool_schemas())
+    assert client.complete(messages, tools=tool_schemas())["cached"]
+    assert len(requests) == 2
+    assert "tool_choice" not in requests[0]
+    assert "parallel_tool_calls" not in requests[0]
+    if provider == "anthropic":
+        assert requests[1]["tool_choice"] == {"type": "any", "disable_parallel_tool_use": True}
+        assert "parallel_tool_calls" not in requests[1]
+    else:
+        assert requests[1]["tool_choice"] == "required"
+        assert requests[1]["parallel_tool_calls"] is False
+    saved = json.loads((tmp_path / f"{result['cache_key']}.json").read_text())
+    assert saved["request"]["request"] == requests[1]
+
+
+@pytest.mark.parametrize("rejected, error", [
+    ([{"name": "ship", "args": {}}, {"name": "wait", "args": {}}], "returned 2 tool calls"),
+    ([], "returned 0 tool calls"),
+    ([{"name": "audit", "args": {"task_id": "task_0"}}],
+     "audit: missing arguments ['ic_id']; unexpected arguments ['task_id']"),
+    ([{"name": "audit", "args": {"ic_id": 5}}], "audit.ic_id: expected string"),
+    ([{"name": "audit", "args": "not JSON"}], "args"),
+    ([{"name": "unknown", "args": {}}], "name"),
+    ([{"name": "assign", "args": {
+        "ic_id": "ic_a", "task_id": "task_0", "spec_detail": 12, "spec_flags": [],
+    }}], "assign.spec_detail: expected an integer from 0 to 3"),
+])
+def test_rejected_calls_recover_without_advancing_or_executing(scenario, rejected, error):
+    class RecoveringClient:
+        def __init__(self):
+            self.calls = []
+
+        def complete(self, messages, **kwargs):
+            calls = rejected if not self.calls else [{"name": "ship", "args": {}}]
+            result = {"tool_calls": calls, "text": "proposal", "messages": messages}
+            self.calls.append(result)
+            return result
+
+    client = RecoveringClient()
+    trace = run_episode(scenario, LLMPolicy(client), grade=False)
+    assert len(client.calls) == 2
+    assert len(client.calls[0]["messages"]) == 2  # Retry must not mutate earlier trace requests.
+    feedback = client.calls[1]["messages"][-1]["content"]
+    assert error in feedback
+    assert "No tool calls were executed" in feedback
+    assert "simulation has not advanced" in feedback
+    assert len(trace.steps) == 2
+    assert trace.steps[-1].action.name == "ship"
+    assert trace.steps[-1].observation.tick == 0
+    assert len(trace.steps[-1].llm_calls) == 2
+
+
+def test_repeated_batches_still_fail_atomically(scenario):
+    class BatchClient:
+        def __init__(self):
+            self.calls = []
+
+        def complete(self, *args, **kwargs):
+            result = {"tool_calls": [{"name": "ship", "args": {}}] * 2, "text": ""}
+            self.calls.append(result)
+            return result
+
+    client = BatchClient()
+    scenario.budgets.max_ticks = 1
+    trace = run_episode(scenario, LLMPolicy(client))
+    assert len(client.calls) == 3 * (len(trace.steps) - 1)
+    assert all(step.action.name == "wait" for step in trace.steps[1:])
+    assert trace.scores["parse_forced_wait_rate"] == 1
 
 
 def test_openai_cache_redaction_usage_and_tool_parsing(monkeypatch, tmp_path):

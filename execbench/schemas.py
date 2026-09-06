@@ -310,17 +310,19 @@ def tool_schemas():
 
 def validate_args(action):
     schema = ARGS[action.name]
-    if set(action.args) - set(schema) or set(schema) - {"force"} - set(action.args):
-        raise ValueError("unexpected or missing action arguments")
+    unexpected = sorted(set(action.args) - set(schema))
+    missing = sorted(set(schema) - {"force"} - set(action.args))
+    if unexpected or missing:
+        raise ValueError(f"{action.name}: missing arguments {missing}; unexpected arguments {unexpected}")
     for k, v in action.args.items():
         expected = {"string": str, "integer": int, "array": list, "boolean": bool}[schema[k]]
         if type(v) is not expected:
-            raise ValueError(f"invalid type for {k}")
+            raise ValueError(f"{action.name}.{k}: expected {schema[k]}, got {type(v).__name__}")
     if action.name == "assign":
-        if not 0 <= action.args["spec_detail"] <= 3 or any(
-            type(x) is not str for x in action.args["spec_flags"]
-        ):
-            raise ValueError("invalid specification")
+        if not 0 <= action.args["spec_detail"] <= 3:
+            raise ValueError("assign.spec_detail: expected an integer from 0 to 3")
+        if any(type(x) is not str for x in action.args["spec_flags"]):
+            raise ValueError("assign.spec_flags: expected an array of strings")
 
 
 class ICPublicView(Model):

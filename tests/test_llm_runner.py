@@ -1,4 +1,5 @@
 import json
+import time
 
 import httpx
 import pytest
@@ -60,6 +61,22 @@ def test_reasoning_effort_set_for_reasoning_models_only(monkeypatch, tmp_path):
     LLMClient("gpt-4o", **kwargs).complete([{"role": "user", "content": "go"}])
     assert requests[0]["reasoning_effort"] == "minimal"
     assert "reasoning_effort" not in requests[1]
+    # Reasoning models reject max_tokens and temperature=0; non-reasoning models still take both.
+    assert requests[0]["max_completion_tokens"] == 2048
+    assert "max_tokens" not in requests[0]
+    assert "temperature" not in requests[0]
+    assert requests[1]["max_tokens"] == 2048
+    assert requests[1]["temperature"] == 0
+
+
+def test_lowest_reasoning_effort_matches_the_model_family():
+    from execbench.llm.client import reasoning_effort_for
+
+    # The gpt-5 family takes "minimal" and 400s on "none"; gpt-5.1+ is the reverse.
+    for model in ("gpt-5", "gpt-5-nano", "gpt-5-mini", "gpt-5-2025-08-07", "gpt-5-nano-2025-08-07"):
+        assert reasoning_effort_for(model) == "minimal", model
+    for model in ("gpt-5.1", "gpt-5.2", "gpt-5.4-nano", "gpt-5.4-nano-2026-03-17", "gpt-5.5"):
+        assert reasoning_effort_for(model) == "none", model
 
 
 def test_anthropic_adapter(monkeypatch, tmp_path):
@@ -130,6 +147,63 @@ def test_benchmark_resume_and_manifest(scenario, tmp_path):
     assert (out / "leaderboard.md").exists()
     with pytest.raises(ValueError, match="different run"):
         run_benchmark(source, ["heuristic"], out)
+
+
+def test_z_ai_thinking_flag_skipped_for_forced_reasoning_models(monkeypatch, tmp_path):
+    """GLM-5.3 rejects any `thinking` object (HTTP 400, code 1210); it wants reasoning_effort."""
+    requests = []
+
+    def post(url, **kwargs):
+        requests.append(kwargs["json"])
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}], "usage": {}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    kwargs = {"api_key": "test", "cache_dir": tmp_path, "base_url": "https://api.z.ai/api/paas/v4"}
+    # Mixed case, because Z.ai matches model ids case-insensitively.
+    LLMClient("GLM-5.3-Flash", **kwargs).complete([{"role": "user", "content": "go"}])
+    LLMClient("glm-4.5-flash", **kwargs).complete([{"role": "user", "content": "go"}])
+    assert "thinking" not in requests[0]
+    assert requests[0]["reasoning_effort"] == "low"
+    assert requests[1]["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in requests[1]
+
+
+def test_provider_error_code_is_surfaced_without_the_body(monkeypatch, tmp_path):
+    def post(*args, **kwargs):
+        return httpx.Response(400, json={"error": {"code": "1210", "message": "secret-sentinel"}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("glm-5.3-flash", api_key="test", cache_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="HTTP 400, provider code 1210") as excinfo:
+        client.complete([{"role": "user", "content": "go"}])
+    assert "secret-sentinel" not in str(excinfo.value)
+
+
+def test_underscored_provider_error_code_is_surfaced(monkeypatch, tmp_path):
+    """OpenAI spells codes with underscores; they must survive the redaction filter."""
+    calls = []
+
+    def post(*args, **kwargs):
+        calls.append(1)
+        return httpx.Response(429, json={"error": {"code": "rate_limit_exceeded"}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("gpt-5-nano", api_key="test", cache_dir=tmp_path)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    with pytest.raises(RuntimeError, match="HTTP 429, provider code rate_limit_exceeded"):
+        client.complete([{"role": "user", "content": "go"}])
+    assert len(calls) == 3
+
+
+def test_malformed_provider_error_code_is_dropped(monkeypatch, tmp_path):
+    def post(*args, **kwargs):
+        return httpx.Response(400, json={"error": {"code": "leaked body: " + "x" * 500}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("model", api_key="test", cache_dir=tmp_path)
+    with pytest.raises(RuntimeError, match=r"HTTP 400 \(model\)\.") as excinfo:
+        client.complete([{"role": "user", "content": "go"}])
+    assert "leaked" not in str(excinfo.value)
 
 
 def test_balance_failure_is_not_retried(monkeypatch, tmp_path):

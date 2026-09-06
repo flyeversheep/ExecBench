@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -19,13 +20,32 @@ def prompt(name):
     return Path(__file__).with_name("prompts").joinpath(name).read_text()
 
 
-# Reasoning model families whose Chat Completions requests accept reasoning_effort="minimal"
-# (verified against OpenAI's reasoning guide). Legacy o1/o3/o4 models are excluded: they only
-# document low/medium/high, and "minimal" was introduced later with GPT-5 — sending it to an
-# o-series model risks an HTTP 400. There is no value that fully disables reasoning across the
-# board ("none" itself 400s on some current models), so "minimal" is the closest equivalent to
-# the thinking:disabled request sent to Z.ai.
+# Reasoning model families that take reasoning_effort on Chat Completions. Legacy o1/o3/o4 models
+# are excluded: they only document low/medium/high, and the lowest-effort values below were
+# introduced later with GPT-5, so sending one to an o-series model risks an HTTP 400.
 REASONING_MODEL_PREFIXES = ("gpt-5", "gpt-6")
+
+# The name of the lowest reasoning effort changed mid-line, and each family rejects the other's
+# spelling with an HTTP 400. Verified directly against the API:
+#   gpt-5, gpt-5-mini, gpt-5-nano (and dated snapshots)  -> "minimal"; "none" is a 400
+#   gpt-5.1 and later                                    -> "none";    "minimal" is a 400
+# Both mean "reason as little as possible" — the closest equivalent to the thinking:disabled
+# request sent to Z.ai. Anything newer is assumed to follow the current "none" convention.
+MINIMAL_EFFORT_PREFIXES = ("gpt-5-", "gpt-5.0")
+
+
+def reasoning_effort_for(model):
+    """The lowest reasoning effort this model actually accepts."""
+    return "minimal" if model == "gpt-5" or model.startswith(MINIMAL_EFFORT_PREFIXES) else "none"
+
+
+# Z.ai models that always reason and reject the thinking:disabled request the other GLM models
+# accept. Sending them any "thinking" object at all — including {"type": "low"} — is an HTTP 400
+# with code 1210; the effort level travels via reasoning_effort instead, which accepts only
+# low/high/max ("minimal", "none" and "medium" all 400 as well). "low" is the closest available
+# equivalent to the disabled thinking used elsewhere. Compared against a lowercased model name:
+# Z.ai treats model ids case-insensitively, so "GLM-5.3-Flash" must match too.
+Z_AI_FORCED_REASONING_PREFIXES = ("glm-5.3",)
 
 # Default judge for report-honesty and coaching grades. Overridable per run with
 # --grader-model, or with EXECBENCH_GRADER_MODEL; pass "none" to grade without an LLM.
@@ -128,9 +148,18 @@ class LLMClient:
                 ]
                 request["tool_choice"] = {"type": "any"}
         elif "api.z.ai" in self.base_url:
-            request["thinking"] = {"type": "disabled"}
+            if self.model.lower().startswith(Z_AI_FORCED_REASONING_PREFIXES):
+                request["reasoning_effort"] = "low"
+            else:
+                request["thinking"] = {"type": "disabled"}
         elif self.model.startswith(REASONING_MODEL_PREFIXES):
-            request["reasoning_effort"] = "minimal"
+            # These models reject two of the defaults used everywhere else: max_tokens must be
+            # spelled max_completion_tokens, and temperature accepts only its default of 1 (even
+            # temperature=0 is a 400), so the sampling temperature is dropped rather than sent.
+            # Determinism therefore rests on the response cache below, not on temperature=0.
+            request["max_completion_tokens"] = request.pop("max_tokens")
+            request.pop("temperature", None)
+            request["reasoning_effort"] = reasoning_effort_for(self.model)
         cache_input = {"provider": self.provider, "base_url": self.base_url, "request": request}
         digest = hashlib.sha256(
             json.dumps(cache_input, sort_keys=True, ensure_ascii=False).encode()
@@ -170,7 +199,19 @@ class LLMClient:
                     continue
                 if response.status_code >= 400:
                     # Never include response bodies, headers, or credentials in errors or traces.
-                    raise RuntimeError(f"LLM request failed with HTTP {response.status_code} ({self.model}).")
+                    # The provider's error *code* is a short opaque enum, not caller data, and is
+                    # the difference between "recharge" (1113), "retry later" (1305), "bad request"
+                    # (1210) and "no such model" (1214) — so it is worth carrying. Length-capped
+                    # and character-filtered so a non-conforming provider cannot smuggle a body in.
+                    # Underscores and hyphens are allowed: OpenAI spells its codes that way
+                    # ("rate_limit_exceeded", "insufficient_quota"), and rejecting them dropped
+                    # exactly the codes that distinguish a throttle from an exhausted account.
+                    code = str(error.get("code", "")) if isinstance(error, dict) else ""
+                    code = code if re.fullmatch(r"[A-Za-z0-9_-]{1,32}", code) else ""
+                    detail = f", provider code {code}" if code else ""
+                    raise RuntimeError(
+                        f"LLM request failed with HTTP {response.status_code}{detail} ({self.model})."
+                    )
                 raw = response.json()
                 break
             with tempfile.NamedTemporaryFile("w", dir=self.cache_dir, delete=False) as f:

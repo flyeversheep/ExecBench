@@ -53,6 +53,7 @@ Alternatively, `scripts/run_live_demo.py` performs API preflights, validates the
 | `EXECBENCH_API_KEY` | Direct environment credential, takes precedence over the reference |
 | `EXECBENCH_PROVIDER` | `openai` for OpenAI-compatible HTTP, or `anthropic` |
 | `EXECBENCH_BASE_URL` | Provider endpoint; defaults to Z.ai, or Anthropic for that provider |
+| `EXECBENCH_GRADER_PROVIDER`, `EXECBENCH_GRADER_BASE_URL`, `EXECBENCH_GRADER_API_KEY`, `EXECBENCH_GRADER_API_KEY_REF` | Same meaning as the unprefixed settings, but for `--grader-model` only; each falls back to its unprefixed counterpart when unset, so the grader can run against a different provider/credential than the policy model |
 | `EXECBENCH_CACHE_DIR` | Content-addressed cache, default `.cache/llm` |
 | `EXECBENCH_HISTORY_CHARS` | Recent-history window, default 60,000 characters; older turns become a compact action/result journal |
 | `EXECBENCH_PRICES_JSON` | Per-model input/output prices in USD per million tokens, e.g. `{"model":{"input":0.6,"output":2.2}}` |

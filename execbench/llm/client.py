@@ -33,6 +33,7 @@ class LLMClient:
         provider=None,
         base_url=None,
         api_key=None,
+        api_key_ref=None,
         cache_dir=None,
         timeout=120,
         input_price=None,
@@ -50,6 +51,7 @@ class LLMClient:
             )
         ).rstrip("/")
         self._key = api_key
+        self._key_ref = api_key_ref
         self.cache_dir = Path(cache_dir or os.getenv("EXECBENCH_CACHE_DIR", ".cache/llm"))
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.timeout = timeout
@@ -63,7 +65,7 @@ class LLMClient:
             self._key = os.getenv("EXECBENCH_API_KEY") or os.getenv(
                 "ANTHROPIC_API_KEY" if self.provider == "anthropic" else "OPENAI_API_KEY"
             )
-            ref = os.getenv("EXECBENCH_API_KEY_REF")
+            ref = self._key_ref or os.getenv("EXECBENCH_API_KEY_REF")
             if not self._key and ref:
                 try:
                     result = subprocess.run(
@@ -193,3 +195,24 @@ class LLMClient:
 
     def json(self, messages):
         return parse_json(self.complete(messages, temperature=0)["text"])
+
+
+def build_grader_client(model):
+    """Build the grader's LLMClient, independent of the policy model's provider.
+
+    Falls back to the unprefixed EXECBENCH_* settings when no EXECBENCH_GRADER_*
+    override is set, so existing single-provider setups are unaffected.
+    """
+    if model is None:
+        return None
+
+    def env(name):
+        return os.getenv(f"EXECBENCH_GRADER_{name}") or os.getenv(f"EXECBENCH_{name}")
+
+    return LLMClient(
+        model,
+        provider=env("PROVIDER"),
+        base_url=env("BASE_URL"),
+        api_key=env("API_KEY"),
+        api_key_ref=env("API_KEY_REF"),
+    )

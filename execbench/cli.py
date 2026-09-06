@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 
 from execbench.gen.scenario_gen import generate_set
-from execbench.llm.client import LLMClient
+from execbench.llm.client import LLMClient, build_grader_client
 from execbench.runner.leaderboard import leaderboard
 from execbench.runner.run_benchmark import run_benchmark, slug
 from execbench.runner.run_episode import read_scenario, run_episode, write_trace
@@ -37,9 +37,7 @@ def generate_cmd(
 def episode_cmd(
     scenario: Path, policy: str = "heuristic", out: Path = Path("traces"), grader_model: str | None = None
 ):
-    trace = run_episode(
-        read_scenario(scenario), policy, grader_client=LLMClient(grader_model) if grader_model else None
-    )
+    trace = run_episode(read_scenario(scenario), policy, grader_client=build_grader_client(grader_model))
     path = write_trace(trace, out / f"{trace.scenario_id}__{slug(policy)}.json.gz")
     path.with_name(path.name.removesuffix(".json.gz") + ".scores.json").write_text(
         json.dumps(trace.scores, indent=2)

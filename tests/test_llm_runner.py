@@ -44,6 +44,24 @@ def test_openai_cache_redaction_usage_and_tool_parsing(monkeypatch, tmp_path):
     assert "private-secret-sentinel" not in next(tmp_path.glob("*.json")).read_text()
 
 
+def test_reasoning_effort_set_for_reasoning_models_only(monkeypatch, tmp_path):
+    requests = []
+
+    def post(url, **kwargs):
+        requests.append(kwargs["json"])
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}], "usage": {}},
+        )
+
+    monkeypatch.setattr(httpx, "post", post)
+    kwargs = {"api_key": "test", "cache_dir": tmp_path, "base_url": "https://api.openai.com/v1"}
+    LLMClient("gpt-5", **kwargs).complete([{"role": "user", "content": "go"}])
+    LLMClient("gpt-4o", **kwargs).complete([{"role": "user", "content": "go"}])
+    assert requests[0]["reasoning_effort"] == "minimal"
+    assert "reasoning_effort" not in requests[1]
+
+
 def test_anthropic_adapter(monkeypatch, tmp_path):
     def post(url, **kwargs):
         assert url.endswith("/messages")

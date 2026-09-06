@@ -19,6 +19,15 @@ def prompt(name):
     return Path(__file__).with_name("prompts").joinpath(name).read_text()
 
 
+# Reasoning model families whose Chat Completions requests accept reasoning_effort="minimal"
+# (verified against OpenAI's reasoning guide). Legacy o1/o3/o4 models are excluded: they only
+# document low/medium/high, and "minimal" was introduced later with GPT-5 — sending it to an
+# o-series model risks an HTTP 400. There is no value that fully disables reasoning across the
+# board ("none" itself 400s on some current models), so "minimal" is the closest equivalent to
+# the thinking:disabled request sent to Z.ai.
+REASONING_MODEL_PREFIXES = ("gpt-5", "gpt-6")
+
+
 def parse_json(text):
     text = text.strip()
     if text.startswith("```"):
@@ -108,6 +117,8 @@ class LLMClient:
                 request["tool_choice"] = {"type": "any"}
         elif "api.z.ai" in self.base_url:
             request["thinking"] = {"type": "disabled"}
+        elif self.model.startswith(REASONING_MODEL_PREFIXES):
+            request["reasoning_effort"] = "minimal"
         cache_input = {"provider": self.provider, "base_url": self.base_url, "request": request}
         digest = hashlib.sha256(
             json.dumps(cache_input, sort_keys=True, ensure_ascii=False).encode()

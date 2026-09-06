@@ -28,10 +28,19 @@ This writes full traces under a directory named for the implementation hash in `
 
 ## Live LLM evaluation
 
-Credentials are read into process memory, never written into traces or caches. Unlock 1Password and enable/approve its CLI integration first.
+Supply a credential either way — export the key directly, or point at a 1Password secret reference. Credentials are read into process memory only, and are never written into traces or caches.
 
 ```sh
+# Option A — the API key directly in the environment
+export EXECBENCH_API_KEY='your-api-key'
+
+# Option B — a 1Password secret reference, resolved at first use with `op read`
 export EXECBENCH_API_KEY_REF='op://AI agents/Z.ai API/credential'
+```
+
+Either one is enough; pick whichever fits your setup. If both are set, the direct key wins. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are also read for the matching provider, so an existing shell setup often needs no extra variable. For option B, install the [1Password CLI](https://developer.1password.com/docs/cli/get-started/), unlock the 1Password app, and enable/approve its CLI integration before running — otherwise `op read` fails or times out.
+
+```sh
 export EXECBENCH_BASE_URL='https://api.z.ai/api/paas/v4'
 uv run execbench check-api --model glm-4.7
 uv run python scripts/validate_live_graders.py --model glm-4.7
@@ -49,8 +58,8 @@ Alternatively, `scripts/run_live_demo.py` performs API preflights, validates the
 
 | Setting | Purpose |
 |---|---|
-| `EXECBENCH_API_KEY_REF` | 1Password secret reference, resolved with `op read` |
-| `EXECBENCH_API_KEY` | Direct environment credential, takes precedence over the reference |
+| `EXECBENCH_API_KEY` | Direct environment credential; takes precedence over the reference |
+| `EXECBENCH_API_KEY_REF` | Alternative to the above: a 1Password secret reference, resolved with `op read` (requires the 1Password CLI) |
 | `EXECBENCH_PROVIDER` | `openai` for OpenAI-compatible HTTP, or `anthropic` |
 | `EXECBENCH_BASE_URL` | Provider endpoint; defaults to Z.ai, or Anthropic for that provider |
 | `EXECBENCH_GRADER_MODEL` | Default judge model when `--grader-model` is not given; defaults to `glm-4.7-flash`. Set either to `none` to score without an LLM |
@@ -59,7 +68,7 @@ Alternatively, `scripts/run_live_demo.py` performs API preflights, validates the
 | `EXECBENCH_HISTORY_CHARS` | Recent-history window, default 60,000 characters; older turns become a compact action/result journal |
 | `EXECBENCH_PRICES_JSON` | Per-model input/output prices in USD per million tokens, e.g. `{"model":{"input":0.6,"output":2.2}}` |
 
-`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are also accepted. The adapters use `httpx` directly, so provider SDKs are unnecessary. The Anthropic adapter uses its native [tool-use contract](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools).
+The adapters use `httpx` directly, so provider SDKs are unnecessary. The Anthropic adapter uses its native [tool-use contract](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools).
 
 Token usage is always recorded. Dollar values are **estimates** based on explicitly configured prices; without prices, `llm_cost_known=0` and the leaderboard omits the dollar estimate. Provider cache discounts, tiered pricing, and taxes are not inferred. Local cache hits have zero additional API spend. Grader tokens and estimated spend are recorded separately. Check [current provider pricing](https://docs.z.ai/guides/overview/pricing) before populating price settings.
 

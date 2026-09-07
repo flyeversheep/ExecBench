@@ -383,3 +383,100 @@ def test_memory_generation_uses_grader_api(monkeypatch, tmp_path, memory_model):
         "provider": "anthropic", "base_url": "https://grader.example/v1",
         "api_key": "grader-test-key", "api_key_ref": "grader-test-ref",
     })] if memory_model else [])
+
+
+@pytest.mark.parametrize("provider", ["openai", "anthropic"])
+@pytest.mark.parametrize("history_chars", [1000000, 1])
+def test_conversation_replays_original_messages_and_paired_results(
+    monkeypatch, tmp_path, scenario, provider, history_chars,
+):
+    requests, snapshots, replies = [], [], []
+
+    def post(url, **kwargs):
+        request = kwargs["json"]
+        requests.append(request)
+        snapshots.append(json.dumps(request))
+        index = len(requests)
+        name = "ship" if index == 3 else "wait"
+        if provider == "anthropic":
+            content = [
+                {"type": "text", "text": "Proceed."},
+                {"type": "tool_use", "id": f"toolu_{index}", "name": name, "input": {}},
+            ]
+            replies.append({"role": "assistant", "content": content})
+            raw = {"content": content}
+        else:
+            message = {
+                "role": "assistant", "content": "Proceed.", "reasoning_content": "Original reasoning",
+                "tool_calls": [{
+                    "id": f"call_{index}", "type": "function",
+                    "function": {"name": name, "arguments": "{  }"},
+                }],
+            }
+            replies.append(message)
+            raw = {"choices": [{"message": message}]}
+        return httpx.Response(200, json=raw)
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("model", provider=provider, api_key="test", cache_dir=tmp_path)
+    trace = run_episode(scenario, LLMPolicy(client, history_chars=history_chars), grade=False)
+    assert [s.action.name for s in trace.steps[1:]] == ["wait", "wait", "ship"]
+    # Neither later policy turns nor provider conversion mutate earlier request records.
+    assert [json.dumps(r) for r in requests] == snapshots
+    for index, call in enumerate(client.calls):
+        saved = json.loads((tmp_path / f"{call['cache_key']}.json").read_text())
+        assert saved["request"]["request"] == requests[index]
+        assert call["request"]["request"] == requests[index]
+    initial_index = 0 if provider == "anthropic" else 1
+    initial = requests[0]["messages"][initial_index]
+    assert json.loads(initial["content"]) == {"initial": trace.steps[0].observation.model_dump(mode="json")}
+    for index in (1, 2):
+        messages = requests[index]["messages"]
+        assert messages[initial_index] == initial
+        if history_chars == 1:
+            # Compact complete turns; never leave orphan tool results or lose current state.
+            assert all(m["role"] != "tool" and "tool_calls" not in m for m in messages)
+            journal = json.loads(messages[-2]["content"])["earlier_journal"]
+            assert len(journal) == index
+            observation = json.loads(messages[-1]["content"])["current"]
+        else:
+            previous = requests[index - 1]["messages"]
+            assert messages[:-2] == previous
+            assert messages[-2] == replies[index - 1]
+            result = messages[-1]
+            if provider == "anthropic":
+                assert result["role"] == "user"
+                block = result["content"][0]
+                assert block["type"] == "tool_result"
+                assert block["tool_use_id"] == f"toolu_{index}"
+                observation = json.loads(block["content"])
+            else:
+                assert result["role"] == "tool"
+                assert result["tool_call_id"] == f"call_{index}"
+                observation = json.loads(result["content"])
+        assert observation == trace.steps[index].observation.model_dump(mode="json")
+
+
+def test_forced_wait_is_not_replayed_as_an_executed_model_tool(monkeypatch, tmp_path, scenario):
+    requests = []
+
+    def post(url, **kwargs):
+        requests.append(kwargs["json"])
+        name = "unknown" if len(requests) <= 3 else "ship"
+        return httpx.Response(200, json={"choices": [{"message": {
+            "role": "assistant", "content": None,
+            "tool_calls": [{"id": "rejected", "type": "function", "function": {
+                "name": name, "arguments": "{}",
+            }}],
+        }}]})
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("model", api_key="test", cache_dir=tmp_path)
+    trace = run_episode(scenario, LLMPolicy(client), grade=False)
+    assert [s.action.name for s in trace.steps[1:]] == ["wait", "ship"]
+    messages = requests[-1]["messages"]
+    assert not any(m["role"] == "tool" or "tool_calls" in m for m in messages)
+    record = json.loads(messages[-1]["content"])
+    assert record["action"]["name"] == "wait"
+    assert "three invalid model responses; forced wait" in record["observation"]["errors"]
+    assert len(messages) > len(requests[2]["messages"])

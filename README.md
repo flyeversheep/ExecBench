@@ -79,6 +79,14 @@ invalid responses, the existing forced-wait rule applies. These request settings
 traces and included in cache keys. Compare the corrected interface using a new results directory;
 old benchmark results remain evidence of the previous interface.
 
+Policy requests send the initial observation once, then append the original assistant tool call
+and its matching tool-result observation on each turn. Earlier messages remain unchanged between
+history compactions, allowing provider prompt caches to reuse conversation prefixes. The existing
+`EXECBENCH_HISTORY_CHARS` limit still measures serialized action/observation history: older complete
+turns become a compact journal, which resets the prefix when it changes. Rejected proposals remain
+text, and harness-forced waits are recorded separately from executed model tool calls. Use a new
+results directory for this message format; the implementation hash prevents mixing it with old runs.
+
 Token usage is always recorded. Dollar values are **estimates** based on explicitly configured prices; without prices, `llm_cost_known=0` and the leaderboard omits the dollar estimate. Provider cache discounts, tiered pricing, and taxes are not inferred. Local cache hits have zero additional API spend. Grader tokens and estimated spend are recorded separately. Check [current provider pricing](https://docs.z.ai/guides/overview/pricing) before populating price settings.
 
 ## Scenarios and reproducibility

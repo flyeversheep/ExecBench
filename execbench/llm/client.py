@@ -7,6 +7,7 @@ import re
 import subprocess
 import tempfile
 import time
+from copy import deepcopy
 from pathlib import Path
 
 import httpx
@@ -128,7 +129,7 @@ class LLMClient:
     def complete(self, messages, tools=None, temperature=0, max_tokens=2048):
         request = {
             "model": self.model,
-            "messages": messages,
+            "messages": deepcopy(messages),
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
@@ -138,7 +139,17 @@ class LLMClient:
                 request["parallel_tool_calls"] = False
         if self.provider == "anthropic":
             request["system"] = "\n".join(m["content"] for m in messages if m["role"] == "system")
-            request["messages"] = [m for m in messages if m["role"] != "system"]
+            request["messages"] = [
+                {
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": m["tool_call_id"],
+                        "content": m["content"],
+                    }],
+                } if m["role"] == "tool" else m
+                for m in request["messages"] if m["role"] != "system"
+            ]
             if tools:
                 request["tools"] = [
                     {
@@ -222,6 +233,8 @@ class LLMClient:
             os.replace(temp, path)
         if self.provider == "anthropic":
             content = raw.get("content", [])
+            assistant_message = {"role": "assistant", "content": deepcopy(content)}
+            tool_call_ids = [c.get("id") for c in content if c["type"] == "tool_use"]
             text = "\n".join(c.get("text", "") for c in content if c["type"] == "text")
             tool_calls = [{"name": c["name"], "args": c["input"]} for c in content if c["type"] == "tool_use"]
             usage = {
@@ -230,6 +243,13 @@ class LLMClient:
             }
         else:
             message = raw["choices"][0]["message"]
+            # Retain original argument strings and provider reasoning content for replay.
+            # Response-only metadata must not be sent back as message parameters.
+            assistant_message = {"role": "assistant", **{
+                k: deepcopy(message[k])
+                for k in ("content", "tool_calls", "refusal", "reasoning_content") if k in message
+            }}
+            tool_call_ids = [c.get("id") for c in message.get("tool_calls") or []]
             text = message.get("content") or ""
             tool_calls = []
             for call in message.get("tool_calls") or []:
@@ -251,6 +271,8 @@ class LLMClient:
         result = {
             "text": text,
             "tool_calls": tool_calls,
+            "assistant_message": assistant_message,
+            "tool_call_ids": tool_call_ids,
             "usage": usage,
             "cache_key": digest,
             "cached": cached,

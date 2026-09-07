@@ -16,6 +16,7 @@ PROFILE = [
     "prior_utilization",
     "stale_trust",
     "compute_fraction",
+    "specification_precision",
     "llm_cost_usd",
     "parse_forced_wait_rate",
 ]

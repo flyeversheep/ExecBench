@@ -345,3 +345,41 @@ def test_grader_model_default_and_opt_out(monkeypatch):
     monkeypatch.setenv("EXECBENCH_GRADER_MODEL", "none")
     assert resolve_grader_model(None) is None
     assert build_grader_client(None) is None
+
+
+@pytest.mark.parametrize("memory_model", [None, "memory-model"])
+def test_memory_generation_uses_grader_api(monkeypatch, tmp_path, memory_model):
+    from typer.testing import CliRunner
+
+    from execbench import cli
+    from execbench.llm import client as client_module
+
+    for name, value in {
+        "PROVIDER": "openai", "BASE_URL": "https://policy.example/v1",
+        "API_KEY": "policy-test-key", "API_KEY_REF": "policy-test-ref",
+        "GRADER_PROVIDER": "anthropic", "GRADER_BASE_URL": "https://grader.example/v1",
+        "GRADER_API_KEY": "grader-test-key", "GRADER_API_KEY_REF": "grader-test-ref",
+    }.items():
+        monkeypatch.setenv(f"EXECBENCH_{name}", value)
+    captured = []
+    sentinel = object()
+
+    def build(model, **kwargs):
+        captured.append((model, kwargs))
+        return sentinel
+
+    def generate(out, count, seed, client, config):
+        assert client is (sentinel if memory_model else None)
+        return []
+
+    monkeypatch.setattr(client_module, "LLMClient", build)
+    monkeypatch.setattr(cli, "generate_set", generate)
+    args = ["generate", "--out", str(tmp_path)]
+    if memory_model:
+        args += ["--memory-model", memory_model]
+    result = CliRunner().invoke(cli.app, args)
+    assert result.exit_code == 0, result.output
+    assert captured == ([("memory-model", {
+        "provider": "anthropic", "base_url": "https://grader.example/v1",
+        "api_key": "grader-test-key", "api_key_ref": "grader-test-ref",
+    })] if memory_model else [])

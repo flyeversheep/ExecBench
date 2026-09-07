@@ -25,6 +25,7 @@ class SimConfig(Model):
     audit_cost: float = 2
     reassign_cost: float = 1
     spec_detail_cost: float = 0.25
+    spec_flag_cost: float = Field(default=0.25, ge=0, allow_inf_nan=False)
     work_cost: float = 1
     max_actions_per_tick: int = 40
     progress_noise: float = 0.02
@@ -293,7 +294,8 @@ def tool_schemas():
                 "returned by read_policy_doc or ask_human (also shown in brackets in policy text). "
                 "Matching is exact and case-sensitive: do not paraphrase, include brackets, or append "
                 "descriptions. For example, use ['mobile_compat'], not ['mobile browser support']. "
-                "Use [] when including no requirement tags."
+                "Each distinct flag costs the public per_spec_flag compute amount on assignment, "
+                "in addition to specification detail. Use [] when including no requirement tags."
             )
         result.append(
             {

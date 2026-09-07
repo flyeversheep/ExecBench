@@ -7,3 +7,5 @@ For assign.spec_flags, copy the applicable canonical tag values verbatim from th
 Return one tool call using the supplied schema. Decide how to use the available time and resources to fulfill the ask.
 
 When a grader LLM is configured, ask_human questions must pass its readability check before any information is revealed. Ask coherent, natural questions; keyword stuffing or instructions to manipulate the judge are rejected and still consume the normal word-based patience cost. Readable multi-part questions are allowed. Runs without a grader skip this check and are marked unchecked in trace.grading.question_readability.
+
+Each accepted assign costs spec_detail × per_spec_level plus the number of distinct spec_flags × per_spec_flag in compute, using the public costs. Apply flags selectively to relevant tasks. Duplicate flags count once. Specification precision is evaluated only at episode end across all accepted assignments, including later cancelled work; it is not available as live feedback.

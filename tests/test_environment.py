@@ -76,7 +76,7 @@ def test_budget_exhaustion_and_invalid_action(scenario):
     e = ExecEnv(scenario)
     assign(e)
     assert act(e, "audit", ic_id="ic_0").errors
-    assert e.compute == 0.25
+    assert e.compute == 0
     act(e, "wait")
     assert e.work["t0"].progress == 0 and e.compute >= 0
     assert act(e, "assign", ic_id="ic_1", task_id="t1", spec_detail=True, spec_flags=[]).errors

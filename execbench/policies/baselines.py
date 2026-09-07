@@ -46,9 +46,10 @@ class TrustAll:
             )
             for ic in free:
                 key = (obs.tick, task.task_id, ic.ic_id)
-                if key not in self.attempted and obs.budgets.compute >= 3 * obs.costs.get(
-                    "per_spec_level", 0.25
-                ):
+                detail = 3 if self.flags else 1
+                cost = (detail * obs.costs.get("per_spec_level", 0.25)
+                        + len(self.flags) * obs.costs.get("per_spec_flag", 0.25))
+                if key not in self.attempted and obs.budgets.compute >= cost:
                     self.attempted.add(key)
                     return Action(
                         name="assign",
@@ -222,7 +223,9 @@ class Random(TrustAll):
             if task.status in ("unassigned", "cancelled"):
                 for ic in free:
                     for detail in range(4):
-                        if obs.budgets.compute >= detail * obs.costs.get("per_spec_level", 0.25):
+                        cost = (detail * obs.costs.get("per_spec_level", 0.25)
+                                + len(self.flags) * obs.costs.get("per_spec_flag", 0.25))
+                        if obs.budgets.compute >= cost:
                             actions.append(
                                 Action(
                                     name="assign",

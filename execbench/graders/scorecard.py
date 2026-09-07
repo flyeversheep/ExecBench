@@ -6,13 +6,14 @@ from execbench.graders import (
     memory_use,
     outcome,
     report_honesty,
+    specification,
     verification,
 )
 
 
 def score(trace, scenario=None, grader_client=None):
     scenario = scenario or trace.scenario
-    for module in (outcome, escalation, detection, verification, memory_use, efficiency):
+    for module in (outcome, escalation, detection, verification, memory_use, efficiency, specification):
         values, explanations = module.grade(trace, scenario)
         trace.scores.update(values)
         trace.explanations.update(explanations)

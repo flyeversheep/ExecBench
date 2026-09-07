@@ -188,7 +188,11 @@ class ExecEnv:
         )
         if not deps_met and not force:
             raise ValueError("dependencies incomplete")
-        self.spend(spec_detail * self.scenario.config.spec_detail_cost)
+        spec_flags = list(dict.fromkeys(spec_flags))
+        self.spend(
+            spec_detail * self.scenario.config.spec_detail_cost
+            + len(spec_flags) * self.scenario.config.spec_flag_cost
+        )
         self.work[task_id] = WorkItem(
             task_id=task_id,
             ic_id=ic_id,

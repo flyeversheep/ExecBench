@@ -29,11 +29,13 @@ def generate_cmd(
     out: Path = Path("scenarios/v0"),
     count: int = typer.Option(50, min=1),
     seed: int = 1000,
-    memory_model: str | None = None,
+    memory_model: str | None = typer.Option(
+        None, help="Memory rendering model, using the grader API settings; omit for template memory."
+    ),
     config: Path | None = None,
 ):
     paths = generate_set(
-        out, count, seed, LLMClient(memory_model) if memory_model else None, SimConfig.from_file(config)
+        out, count, seed, build_grader_client(memory_model) if memory_model else None, SimConfig.from_file(config)
     )
     typer.echo(f"Generated {len(paths)} scenarios in {out}")
 

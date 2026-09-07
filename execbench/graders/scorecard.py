@@ -26,7 +26,7 @@ def score(trace, scenario=None, grader_client=None):
         trace.explanations.update(explanations)
         trace.grading[module.__name__.split(".")[-1]] = evidence
     if grader_client:
-        calls = grader_client.calls[start:]
+        calls = trace.grading.get("question_readability", {}).get("calls", []) + grader_client.calls[start:]
         trace.grading["calls"] = calls
         trace.scores["grader_input_tokens"] = float(
             sum(c.get("usage", {}).get("input_tokens", 0) for c in calls)

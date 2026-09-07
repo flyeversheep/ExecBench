@@ -47,7 +47,7 @@ def reasoning_effort_for(model):
 # Z.ai treats model ids case-insensitively, so "GLM-5.3-Flash" must match too.
 Z_AI_FORCED_REASONING_PREFIXES = ("glm-5.3",)
 
-# Default judge for report-honesty and coaching grades. Overridable per run with
+# Default judge for question readability, report-honesty, and coaching grades. Overridable per run with
 # --grader-model, or with EXECBENCH_GRADER_MODEL; pass "none" to grade without an LLM.
 DEFAULT_GRADER_MODEL = "glm-4.7-flash"
 GRADER_DISABLED_VALUES = ("", "none", "off")

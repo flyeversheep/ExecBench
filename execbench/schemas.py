@@ -261,7 +261,7 @@ COACH_IC_DESCRIPTION = (
 
 ARGS = {
     "read_policy_doc": {},
-    "ask_human": {"human_id": "string", "question": "string"},
+    "ask_human": {"human_id": "string", "task_id": "string", "question": "string"},
     "assign": {
         "ic_id": "string",
         "task_id": "string",
@@ -305,6 +305,12 @@ def tool_schemas():
                         "{tag, description} objects. The document may omit requirements; ask humans "
                         "for additional constraints. Reading costs no compute or patience."
                         if name == "read_policy_doc" else
+                        "Ask a stakeholder about one task. Only matching constraints applicable to task_id "
+                        "are revealed. Tags may also apply to other tasks. Costs one patience per 20 "
+                        "whitespace-delimited words, rounded up, with a minimum of one. Insufficient "
+                        "patience yields a minimal response and exhausts the remaining balance. When a grader "
+                        "is configured, incoherent or keyword-stuffed questions are rejected but still cost patience."
+                        if name == "ask_human" else
                         COACH_IC_DESCRIPTION if name == "coach_ic" else name.replace("_", " ")
                     ),
                     "parameters": {

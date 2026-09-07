@@ -109,16 +109,64 @@ def test_policy_constraints_are_public_and_usable_in_assignments(scenario, docum
     assert details["violated_constraints"] == ([] if documented else [constraint.tag])
 
 
-def test_human_duplicate_patience(scenario):
+def test_human_repeated_questions_use_word_cost(scenario):
     e = ExecEnv(scenario)
-    q = "Which mobile platforms are required?"
-    result = act(e, "ask_human", human_id="pm", question=q)
-    assert result.action_result["constraints"][0]["tag"] == "mobile_compat"
-    assert e.patience["pm"] == 4
-    act(e, "ask_human", human_id="pm", question=q)
-    assert e.patience["pm"] == 2
-    act(e, "ask_human", human_id="pm", question=q)
-    assert not act(e, "ask_human", human_id="pm", question=q).action_result["constraints"]
+    for remaining in range(4, -1, -1):
+        result = act(e, "ask_human", human_id="pm", task_id="t0", question="Which mobile platforms?")
+        assert result.action_result["constraints"][0]["tag"] == "mobile_compat"
+        assert e.patience["pm"] == remaining
+    result = act(e, "ask_human", human_id="pm", task_id="t0", question="Which mobile platforms?")
+    assert result.action_result["constraints"] == []
+
+
+@pytest.mark.parametrize("words,cost", [(0, 1), (1, 1), (20, 1), (21, 2), (40, 2), (41, 3)])
+def test_human_word_cost(scenario, words, cost):
+    e = ExecEnv(scenario)
+    question = " \n\t".join(["mobile"] * words)
+    act(e, "ask_human", human_id="pm", task_id="t0", question=question)
+    assert e.patience["pm"] == 5 - cost
+    assert e.tick == 0
+    assert e.compute == 100
+
+
+def test_human_insufficient_patience(scenario):
+    scenario.humans[0].patience = 1
+    e = ExecEnv(scenario)
+    result = act(e, "ask_human", human_id="pm", task_id="t0", question="mobile " * 21)
+    assert result.action_result["constraints"] == []
+    assert e.patience["pm"] == 0
+    assert not e.revealed
+
+
+def test_human_task_scope_and_question_matching(scenario):
+    scenario.tasks[1].required_spec_flags = ["retention_limit"]
+    scenario.humans[0].constraints.append(scenario.humans[0].constraints[0].model_copy(update={
+        "constraint_id": "retention", "tag": "retention_limit", "description": "Retain for 30 days.",
+        "revealed_by": ["risks"],
+    }))
+    e = ExecEnv(scenario)
+    question = "What mobile and retention requirements apply?"
+    for task_id, expected in [("t0", "mobile_compat"), ("t1", "retention_limit")]:
+        result = act(e, "ask_human", human_id="pm", task_id=task_id, question=question)
+        assert [c["tag"] for c in result.action_result["constraints"]] == [expected]
+    result = act(e, "ask_human", human_id="pm", task_id="t0", question="When is the deadline?")
+    assert result.action_result["constraints"] == []
+    # A discovered tag can still be used on another applicable task without asking again.
+    assign(e, task="t2")
+    assert e.work["t2"].spec_flags == ["mobile_compat"]
+
+
+@pytest.mark.parametrize("args", [
+    {"human_id": "pm", "question": "mobile"},
+    {"human_id": "pm", "task_id": "unknown", "question": "mobile"},
+    {"human_id": "unknown", "task_id": "t0", "question": "mobile"},
+])
+def test_human_invalid_target_does_not_spend_patience(scenario, args):
+    e = ExecEnv(scenario)
+    result = act(e, "ask_human", **args)
+    assert result.errors
+    assert e.patience["pm"] == 5
+    assert e.questions["pm"] == []
 
 
 def decision(**kwargs):

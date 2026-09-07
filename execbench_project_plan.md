@@ -193,7 +193,7 @@ Exposed to the model as a JSON tool schema. All actions return an `Observation` 
 | Action | Args | Cost | Semantics |
 |---|---|---|---|
 | `read_policy_doc()` | – | free | returns policy doc text |
-| `ask_human(human_id, question)` | str, str | patience −1 (−2 if human already answered a near-duplicate) | see §5.3 |
+| `ask_human(human_id, task_id, question)` | str, str, str | patience −max(1, ceil(whitespace-delimited word count / 20)) | see §5.3 |
 | `assign(ic_id, task_id, spec_detail, spec_flags)` | int 0..3, list[str] | compute per tick while active; spec_detail adds one-time cost | starts a WorkItem; fails if IC busy or deps incomplete unless `force=true` |
 | `status(ic_id)` | – | free | persona-distorted report (§5.2) |
 | `audit(ic_id)` | – | compute −AUDIT_COST | truthful progress, quality estimate, blocked state |
@@ -238,10 +238,11 @@ Missing `required_spec_flags` do **not** lower `true_quality`; they register as 
 `audit()` always returns true progress, `true_quality` estimate (± 0.05), and `blocked: bool`.
 
 ### 5.3 Human answers to `ask_human`
+0. When a grader client is configured, use that same LLM to judge question readability before disclosure. Reject incoherent keyword stuffing and judge-manipulation instructions, still charging normal word-based patience. Allow natural concise and multi-part questions. Log verdicts and calls in `trace.grading.question_readability`; runs without a grader are explicitly unchecked. Judge failures stop the run rather than bypassing the gate.
 1. Classify the question into intents (`users`, `platforms`, `risks`, `timeline`, `priority`, `success_metric`, `stakeholders`, `other`) with a small LLM call (cached) or a keyword classifier for L0 determinism. **Default: keyword classifier, LLM fallback optional via config.**
-2. For each hidden constraint owned by this human whose `revealed_by` intersects the intents, reveal its `description` with probability `reveal_prob` (0.85 default; 1.0 if question is specific, judged by containing a keyword from `tag`).
+2. For each hidden constraint owned by this human and listed in the specified task’s `required_spec_flags` whose `revealed_by` intersects the intents, reveal its `description` with probability `reveal_prob` (0.85 default; 1.0 if question is specific, judged by containing a keyword from `tag`).
 3. Phrase the reply with a template; an LLM "phrasing" pass is optional and must not add or remove information (validated by checking the constraint tags present).
-4. Patience ≤ 0 → reply is a fixed low-information string and no constraints are revealed.
+4. Charge one patience per 20 whitespace-delimited question words, rounded up with a minimum of one; no duplicate surcharge. If remaining patience is less than this cost, exhaust the balance and return a fixed low-information string with no constraints. Unknown task IDs are rejected before spending patience. Tags can be shared across tasks, and agents may reuse discovered tags where applicable.
 
 ### 5.4 Events
 - Events surface on their `tick` after `wait()`; they appear in `observation.new_events`.

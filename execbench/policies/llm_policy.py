@@ -45,24 +45,36 @@ class LLMPolicy:
             {"role": "user", "content": json.dumps(payload)},
         ]
         start = len(self.client.calls)
-        for _ in range(3):
+        for attempt in range(3):
             result = self.client.complete(messages, tools=tool_schemas(), max_tokens=2048)
             try:
                 if len(result["tool_calls"]) != 1:
-                    raise ValueError("exactly one tool call required")
+                    raise ValueError(
+                        f"You returned {len(result['tool_calls'])} tool calls; exactly one is required"
+                    )
                 action = Action.model_validate(result["tool_calls"][0])
                 validate_args(action)
                 self.calls = self.client.calls[start:]
                 return action
-            except (ValueError, TypeError):
-                messages.append(
-                    {"role": "assistant", "content": json.dumps(result["tool_calls"]) or result["text"]}
-                )
-                messages.append(
+            except (ValueError, TypeError) as exc:
+                # Use a fresh list so saved request records retain the messages actually sent.
+                # Rejected proposals are text, not executed tool turns with fabricated results.
+                if attempt == 2:
+                    break
+                messages = [*messages,
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(result["tool_calls"]) if result["tool_calls"] else result["text"],
+                    },
                     {
                         "role": "user",
-                        "content": "Invalid response. Return exactly one valid tool call matching its argument schema.",
-                    }
-                )
+                        "content": (
+                            f"Invalid response: {exc}. No tool calls were executed; "
+                            "the simulation has not advanced. "
+                            "Return exactly one valid tool call matching its argument schema. "
+                            "Wait for its result before proposing another action."
+                        ),
+                    },
+                ]
         self.calls = self.client.calls[start:]
         raise ParseFailure()

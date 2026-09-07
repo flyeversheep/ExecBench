@@ -39,7 +39,11 @@ class Oracle:
         ]
         incident_ids = {x.incident_task.task_id for x in e.scenario.events if x.incident_task}
         ready.sort(key=lambda t: (t.task_id not in incident_ids, -e.weights.get(t.task_id, 0), t.task_id))
-        if free and ready and e.compute >= 3 * e.scenario.config.spec_detail_cost:
+        ready = [t for t in ready if e.compute >= (
+            3 * e.scenario.config.spec_detail_cost
+            + len(set(t.required_spec_flags)) * e.scenario.config.spec_flag_cost
+        )]
+        if free and ready:
             task = ready[0]
             return Action(
                 name="assign",

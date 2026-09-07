@@ -5,7 +5,12 @@ from pathlib import Path
 import typer
 
 from execbench.gen.scenario_gen import generate_set
-from execbench.llm.client import LLMClient
+from execbench.llm.client import (
+    DEFAULT_GRADER_MODEL,
+    LLMClient,
+    build_grader_client,
+    resolve_grader_model,
+)
 from execbench.runner.leaderboard import leaderboard
 from execbench.runner.run_benchmark import run_benchmark, slug
 from execbench.runner.run_episode import read_scenario, run_episode, write_trace
@@ -24,22 +29,28 @@ def generate_cmd(
     out: Path = Path("scenarios/v0"),
     count: int = typer.Option(50, min=1),
     seed: int = 1000,
-    memory_model: str | None = None,
+    memory_model: str | None = typer.Option(
+        None, help="Memory rendering model, using the grader API settings; omit for template memory."
+    ),
     config: Path | None = None,
 ):
     paths = generate_set(
-        out, count, seed, LLMClient(memory_model) if memory_model else None, SimConfig.from_file(config)
+        out, count, seed, build_grader_client(memory_model) if memory_model else None, SimConfig.from_file(config)
     )
     typer.echo(f"Generated {len(paths)} scenarios in {out}")
 
 
 @app.command("run-episode")
 def episode_cmd(
-    scenario: Path, policy: str = "heuristic", out: Path = Path("traces"), grader_model: str | None = None
+    scenario: Path,
+    policy: str = "heuristic",
+    out: Path = Path("traces"),
+    grader_model: str | None = typer.Option(
+        None, help=f"Judge model for report/coaching grades (default {DEFAULT_GRADER_MODEL}; 'none' disables)."
+    ),
 ):
-    trace = run_episode(
-        read_scenario(scenario), policy, grader_client=LLMClient(grader_model) if grader_model else None
-    )
+    grader_model = resolve_grader_model(grader_model)
+    trace = run_episode(read_scenario(scenario), policy, grader_client=build_grader_client(grader_model))
     path = write_trace(trace, out / f"{trace.scenario_id}__{slug(policy)}.json.gz")
     path.with_name(path.name.removesuffix(".json.gz") + ".scores.json").write_text(
         json.dumps(trace.scores, indent=2)
@@ -54,10 +65,12 @@ def benchmark_cmd(
     policies: str = "oracle,heuristic,trust_all,audit_all,random",
     out: Path | None = None,
     workers: int = typer.Option(8, min=1),
-    grader_model: str | None = None,
+    grader_model: str | None = typer.Option(
+        None, help=f"Judge model for report/coaching grades (default {DEFAULT_GRADER_MODEL}; 'none' disables)."
+    ),
 ):
     out = out or Path("results") / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    rows = run_benchmark(scenario_set, policies.split(","), out, workers, grader_model)
+    rows = run_benchmark(scenario_set, policies.split(","), out, workers, resolve_grader_model(grader_model))
     leaderboard(out)
     failed = sum(r["status"] != "ok" for r in rows)
     typer.echo(f"{len(rows) - failed} completed, {failed} failed. Results: {out}")

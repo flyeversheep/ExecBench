@@ -46,9 +46,10 @@ class TrustAll:
             )
             for ic in free:
                 key = (obs.tick, task.task_id, ic.ic_id)
-                if key not in self.attempted and obs.budgets.compute >= 3 * obs.costs.get(
-                    "per_spec_level", 0.25
-                ):
+                detail = 3 if self.flags else 1
+                cost = (detail * obs.costs.get("per_spec_level", 0.25)
+                        + len(self.flags) * obs.costs.get("per_spec_flag", 0.25))
+                if key not in self.attempted and obs.budgets.compute >= cost:
                     self.attempted.add(key)
                     return Action(
                         name="assign",
@@ -84,10 +85,14 @@ class AuditAll(TrustAll):
         ]
         for h in obs.humans:
             for idx, question in enumerate(questions):
-                key = (h["human_id"], idx)
-                if key not in self.asked:
-                    self.asked.add(key)
-                    return Action(name="ask_human", args={"human_id": h["human_id"], "question": question})
+                for task in obs.tasks:
+                    key = (h["human_id"], task.task_id, idx)
+                    cost = max(1, (len(question.split()) + 19) // 20)
+                    if key not in self.asked and obs.budgets.patience[h["human_id"]] >= cost:
+                        self.asked.add(key)
+                        return Action(name="ask_human", args={
+                            "human_id": h["human_id"], "task_id": task.task_id, "question": question,
+                        })
         for ic in obs.roster:
             key = (obs.tick, ic.ic_id)
             if key not in self.audited and (ic.current_task or ic.last_status):
@@ -123,10 +128,14 @@ class Heuristic(TrustAll):
                     "What are the timeline, priorities and success metrics?",
                 ]
             ):
-                key = (h["human_id"], idx)
-                if key not in self.asked:
-                    self.asked.add(key)
-                    return Action(name="ask_human", args={"human_id": h["human_id"], "question": question})
+                for task in obs.tasks:
+                    key = (h["human_id"], task.task_id, idx)
+                    cost = max(1, (len(question.split()) + 19) // 20)
+                    if key not in self.asked and obs.budgets.patience[h["human_id"]] >= cost:
+                        self.asked.add(key)
+                        return Action(name="ask_human", args={
+                            "human_id": h["human_id"], "task_id": task.task_id, "question": question,
+                        })
         for event in self.events.values():
             if event.kind.value == "decision_point" and event.event_id not in self.escalated:
                 if event.deadline_tick is None or obs.tick < event.deadline_tick:
@@ -189,7 +198,7 @@ class Random(TrustAll):
             if (ic.last_status or {}).get("claims_done"):
                 actions.append(
                     Action(
-                        name="feed_back",
+                        name="coach_ic",
                         args={"ic_id": ic.ic_id, "text": "Please verify completion before reporting."},
                     )
                 )
@@ -214,7 +223,9 @@ class Random(TrustAll):
             if task.status in ("unassigned", "cancelled"):
                 for ic in free:
                     for detail in range(4):
-                        if obs.budgets.compute >= detail * obs.costs.get("per_spec_level", 0.25):
+                        cost = (detail * obs.costs.get("per_spec_level", 0.25)
+                                + len(self.flags) * obs.costs.get("per_spec_flag", 0.25))
+                        if obs.budgets.compute >= cost:
                             actions.append(
                                 Action(
                                     name="assign",
@@ -228,9 +239,10 @@ class Random(TrustAll):
                                 )
                             )
         for h in obs.humans:
-            actions.append(
-                Action(name="ask_human", args={"human_id": h["human_id"], "question": "What are the risks?"})
-            )
+            for task in obs.tasks:
+                actions.append(Action(name="ask_human", args={
+                    "human_id": h["human_id"], "task_id": task.task_id, "question": "What are the risks?",
+                }))
         for event in self.events.values():
             if event.deadline_tick is not None and obs.tick >= event.deadline_tick:
                 continue

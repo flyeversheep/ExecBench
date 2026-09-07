@@ -16,7 +16,7 @@ def read_scenario(path):
 
 
 def run_episode(scenario, policy="heuristic", grade=True, client=None, grader_client=None):
-    env = ExecEnv(scenario)
+    env = ExecEnv(scenario, grader_client=grader_client)
     if isinstance(policy, str):
         name = policy
         if policy == "oracle":

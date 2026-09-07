@@ -6,13 +6,14 @@ from execbench.graders import (
     memory_use,
     outcome,
     report_honesty,
+    specification,
     verification,
 )
 
 
 def score(trace, scenario=None, grader_client=None):
     scenario = scenario or trace.scenario
-    for module in (outcome, escalation, detection, verification, memory_use, efficiency):
+    for module in (outcome, escalation, detection, verification, memory_use, efficiency, specification):
         values, explanations = module.grade(trace, scenario)
         trace.scores.update(values)
         trace.explanations.update(explanations)
@@ -26,7 +27,7 @@ def score(trace, scenario=None, grader_client=None):
         trace.explanations.update(explanations)
         trace.grading[module.__name__.split(".")[-1]] = evidence
     if grader_client:
-        calls = grader_client.calls[start:]
+        calls = trace.grading.get("question_readability", {}).get("calls", []) + grader_client.calls[start:]
         trace.grading["calls"] = calls
         trace.scores["grader_input_tokens"] = float(
             sum(c.get("usage", {}).get("input_tokens", 0) for c in calls)

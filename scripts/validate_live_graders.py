@@ -6,12 +6,12 @@ from pathlib import Path
 
 from execbench.graders.feedback import FeedbackGrade, coaching_value
 from execbench.graders.report_honesty import ReportGrade
-from execbench.llm.client import LLMClient, prompt
+from execbench.llm.client import DEFAULT_GRADER_MODEL, LLMClient, prompt
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="glm-4.7")
+    parser.add_argument("--model", default=DEFAULT_GRADER_MODEL)
     parser.add_argument("--out", default="results/grader-validation.json")
     args = parser.parse_args()
     client = LLMClient(args.model)

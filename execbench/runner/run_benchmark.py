@@ -5,7 +5,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from execbench.llm.client import LLMBalanceError, LLMClient
+from execbench.llm.client import LLMBalanceError, build_grader_client
 from execbench.runner.run_episode import read_scenario, run_episode, write_trace
 
 
@@ -33,6 +33,8 @@ def run_benchmark(scenario_set, policies, out, workers=8, grader_model=None, res
         "history_chars": int(os.getenv("EXECBENCH_HISTORY_CHARS", "60000")),
         "provider": os.getenv("EXECBENCH_PROVIDER", "openai"),
         "base_url": os.getenv("EXECBENCH_BASE_URL", "default"),
+        "grader_provider": os.getenv("EXECBENCH_GRADER_PROVIDER") or os.getenv("EXECBENCH_PROVIDER", "openai"),
+        "grader_base_url": os.getenv("EXECBENCH_GRADER_BASE_URL") or os.getenv("EXECBENCH_BASE_URL", "default"),
         "pricing": json.loads(os.getenv("EXECBENCH_PRICES_JSON", "{}")),
         "version": "0.1.0",
         "policies": policies,
@@ -51,9 +53,7 @@ def run_benchmark(scenario_set, policies, out, workers=8, grader_model=None, res
     def job(scenario_path, policy):
         scenario = read_scenario(scenario_path)
         try:
-            trace = run_episode(
-                scenario, policy, grader_client=LLMClient(grader_model) if grader_model else None
-            )
+            trace = run_episode(scenario, policy, grader_client=build_grader_client(grader_model))
             trace_path = out / "traces" / f"{scenario.scenario_id}__{slug(policy)}.json.gz"
             write_trace(trace, trace_path)
             return {

@@ -6,7 +6,8 @@ from execbench.schemas import Action, EpisodeTrace, TraceStep, WorkItem, validat
 
 
 class ExecEnv:
-    def __init__(self, scenario):
+    def __init__(self, scenario, grader_client=None):
+        self.grader_client = grader_client
         self.scenario = scenario.model_copy(deep=True)
         self.reset()
 
@@ -22,6 +23,8 @@ class ExecEnv:
         self.last_status = {}
         self.task_reports = {}
         self.questions = {h.human_id: [] for h in s.humans}
+        self.question_judgments = []
+        self.question_judge_calls = []
         self.weights = dict(s.humans[0].quality_weights)
         self.surfaced, self.blockers, self.handled_incidents = set(), set(), set()
         self.new_events, self.feedback, self.escalations, self.misreports, self.assignments = (
@@ -127,23 +130,48 @@ class ExecEnv:
         return obs
 
     def _read_policy_doc(self):
-        for h in self.scenario.humans:
-            self.revealed.update(c.tag for c in h.constraints if c.in_policy_doc)
-        return {"policy_doc": self.scenario.policy_doc}
+        constraints = [
+            {"tag": c.tag, "description": c.description}
+            for h in self.scenario.humans
+            for c in h.constraints
+            if c.in_policy_doc
+        ]
+        self.revealed.update(c["tag"] for c in constraints)
+        return {"policy_doc": self.scenario.policy_doc, "constraints": constraints}
 
-    def _ask_human(self, human_id, question):
+    def _ask_human(self, human_id, task_id, question):
         h = next((h for h in self.scenario.humans if h.human_id == human_id), None)
         if h is None:
             raise ValueError("unknown human")
+        if task_id not in self.tasks:
+            raise ValueError("unknown task")
+        cost = humans.question_cost(question)
+        if self.grader_client is not None and self.patience[human_id] >= cost:
+            from execbench.graders.question_readability import judge
+
+            start = len(self.grader_client.calls)
+            verdict = judge(self.grader_client, question)
+            self.question_judge_calls.extend(self.grader_client.calls[start:])
+            self.question_judgments.append({
+                "step_index": len(self.steps), "human_id": human_id, "task_id": task_id, **verdict,
+            })
+            if not verdict["readable"]:
+                self.questions[human_id].append(question)
+                self.patience[human_id] -= cost
+                return {
+                    "answer": "Please ask a readable, coherent question rather than a list of keywords.",
+                    "constraints": [], "question_rejected": True,
+                }
         result, cost = humans.answer(
             h,
             question,
+            self.tasks[task_id],
             self.patience[human_id],
-            self.questions[human_id],
             self.scenario.config,
             dynamics.rng_for(self.scenario.seed, "human", human_id, len(self.questions[human_id])),
             self.weights,
         )
+        self.questions[human_id].append(question)
         self.patience[human_id] = max(0, self.patience[human_id] - cost)
         self.revealed.update(c["tag"] for c in result["constraints"])
         return result
@@ -160,7 +188,11 @@ class ExecEnv:
         )
         if not deps_met and not force:
             raise ValueError("dependencies incomplete")
-        self.spend(spec_detail * self.scenario.config.spec_detail_cost)
+        spec_flags = list(dict.fromkeys(spec_flags))
+        self.spend(
+            spec_detail * self.scenario.config.spec_detail_cost
+            + len(spec_flags) * self.scenario.config.spec_flag_cost
+        )
         self.work[task_id] = WorkItem(
             task_id=task_id,
             ic_id=ic_id,
@@ -307,11 +339,14 @@ class ExecEnv:
         self.resolutions[event_id] = {"option": option, "source": "human", "tick": self.tick}
         return {"event_id": event_id, "option": option}
 
-    def _feed_back(self, ic_id, text):
+    def _coach_ic(self, ic_id, text):
         if ic_id not in self.feedback_eligible:
-            raise ValueError("feedback requires a claimed-done or cancelled task")
+            raise ValueError(
+                "feedback requires a claimed-done or cancelled task; coach_ic records IC coaching "
+                "only and cannot send task instructions or change requirements"
+            )
         self.feedback.append({"ic_id": ic_id, "text": text, "tick": self.tick, "step_index": len(self.steps)})
-        return {"recorded": True}
+        return {"recorded": True, "effect": "coaching_recorded_only", "task_state_changed": False}
 
     def _report(self, text):
         self.final_report = text
@@ -366,5 +401,11 @@ class ExecEnv:
             policy=policy,
             scenario=self.scenario,
             steps=self.steps,
+            grading={"question_readability": {
+                "mode": "llm" if self.grader_client is not None else "unchecked",
+                "model": self.grader_client.model if self.grader_client is not None else None,
+                "judgments": self.question_judgments,
+                "calls": self.question_judge_calls,
+            }},
             termination_reason=self.termination_reason,
         )

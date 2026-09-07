@@ -25,6 +25,7 @@ class SimConfig(Model):
     audit_cost: float = 2
     reassign_cost: float = 1
     spec_detail_cost: float = 0.25
+    spec_flag_cost: float = Field(default=0.25, ge=0, allow_inf_nan=False)
     work_cost: float = 1
     max_actions_per_tick: int = 40
     progress_noise: float = 0.02
@@ -240,7 +241,7 @@ class Action(Model):
         "reassign",
         "cancel",
         "escalate",
-        "feed_back",
+        "coach_ic",
         "report",
         "wait",
         "ship",
@@ -249,9 +250,19 @@ class Action(Model):
 
 
 # Frozen tool contract, including the force switch described in the plan's assign semantics.
+COACH_IC_DESCRIPTION = (
+    "Record coaching to help an IC identify observed weaknesses and improve their future working "
+    "or reporting practices. Ground feedback in observed behavior and give actionable advice. "
+    "Allowed only after that IC has at least one claimed-done or cancelled task. "
+    "This records feedback for end-of-episode evaluation only; it does not change task specifications, "
+    "progress, quality, blockers, or IC behavior in this episode. Do not use it to send task "
+    "instructions, add requirements, or request revisions. Task requirements belong in assign.spec_flags."
+)
+
+
 ARGS = {
     "read_policy_doc": {},
-    "ask_human": {"human_id": "string", "question": "string"},
+    "ask_human": {"human_id": "string", "task_id": "string", "question": "string"},
     "assign": {
         "ic_id": "string",
         "task_id": "string",
@@ -264,7 +275,7 @@ ARGS = {
     "reassign": {"task_id": "string", "new_ic_id": "string"},
     "cancel": {"task_id": "string"},
     "escalate": {"event_id": "string", "framing": "string"},
-    "feed_back": {"ic_id": "string", "text": "string"},
+    "coach_ic": {"ic_id": "string", "text": "string"},
     "report": {"text": "string"},
     "wait": {},
     "ship": {},
@@ -278,12 +289,32 @@ def tool_schemas():
         if "spec_detail" in props:
             props["spec_detail"].update(minimum=0, maximum=3)
             props["spec_flags"]["items"] = {"type": "string"}
+            props["spec_flags"]["description"] = (
+                "Canonical requirement tags for this task. Copy tag values verbatim from the constraints "
+                "returned by read_policy_doc or ask_human (also shown in brackets in policy text). "
+                "Matching is exact and case-sensitive: do not paraphrase, include brackets, or append "
+                "descriptions. For example, use ['mobile_compat'], not ['mobile browser support']. "
+                "Each distinct flag costs the public per_spec_flag compute amount on assignment, "
+                "in addition to specification detail. Use [] when including no requirement tags."
+            )
         result.append(
             {
                 "type": "function",
                 "function": {
                     "name": name,
-                    "description": name.replace("_", " "),
+                    "description": (
+                        "Read the complete static policy document and its documented constraints as "
+                        "{tag, description} objects. The document may omit requirements; ask humans "
+                        "for additional constraints. Reading costs no compute or patience."
+                        if name == "read_policy_doc" else
+                        "Ask a stakeholder about one task. Only matching constraints applicable to task_id "
+                        "are revealed. Tags may also apply to other tasks. Costs one patience per 20 "
+                        "whitespace-delimited words, rounded up, with a minimum of one. Insufficient "
+                        "patience yields a minimal response and exhausts the remaining balance. When a grader "
+                        "is configured, incoherent or keyword-stuffed questions are rejected but still cost patience."
+                        if name == "ask_human" else
+                        COACH_IC_DESCRIPTION if name == "coach_ic" else name.replace("_", " ")
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": props,
@@ -298,17 +329,19 @@ def tool_schemas():
 
 def validate_args(action):
     schema = ARGS[action.name]
-    if set(action.args) - set(schema) or set(schema) - {"force"} - set(action.args):
-        raise ValueError("unexpected or missing action arguments")
+    unexpected = sorted(set(action.args) - set(schema))
+    missing = sorted(set(schema) - {"force"} - set(action.args))
+    if unexpected or missing:
+        raise ValueError(f"{action.name}: missing arguments {missing}; unexpected arguments {unexpected}")
     for k, v in action.args.items():
         expected = {"string": str, "integer": int, "array": list, "boolean": bool}[schema[k]]
         if type(v) is not expected:
-            raise ValueError(f"invalid type for {k}")
+            raise ValueError(f"{action.name}.{k}: expected {schema[k]}, got {type(v).__name__}")
     if action.name == "assign":
-        if not 0 <= action.args["spec_detail"] <= 3 or any(
-            type(x) is not str for x in action.args["spec_flags"]
-        ):
-            raise ValueError("invalid specification")
+        if not 0 <= action.args["spec_detail"] <= 3:
+            raise ValueError("assign.spec_detail: expected an integer from 0 to 3")
+        if any(type(x) is not str for x in action.args["spec_flags"]):
+            raise ValueError("assign.spec_flags: expected an array of strings")
 
 
 class ICPublicView(Model):
@@ -359,10 +392,17 @@ class Observation(Model):
     terminated: bool = False
 
 
+class LegacyFeedbackAction(Model):
+    """Read-only historical action; excluded from executable actions and tool schemas."""
+
+    name: Literal["feed_back"]
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
 class TraceStep(Model):
     index: int
     tick: int
-    action: Action | None
+    action: Action | LegacyFeedbackAction | None
     observation: Observation
     hidden: dict[str, Any]
     llm_calls: list[dict[str, Any]] = Field(default_factory=list)

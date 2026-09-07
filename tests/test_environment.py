@@ -1,3 +1,4 @@
+import copy
 import json
 
 import pytest
@@ -75,22 +76,97 @@ def test_budget_exhaustion_and_invalid_action(scenario):
     e = ExecEnv(scenario)
     assign(e)
     assert act(e, "audit", ic_id="ic_0").errors
-    assert e.compute == 0.25
+    assert e.compute == 0
     act(e, "wait")
     assert e.work["t0"].progress == 0 and e.compute >= 0
     assert act(e, "assign", ic_id="ic_1", task_id="t1", spec_detail=True, spec_flags=[]).errors
 
 
-def test_human_duplicate_patience(scenario):
+@pytest.mark.parametrize("documented", [True, False])
+def test_policy_constraints_are_public_and_usable_in_assignments(scenario, documented):
+    constraint = scenario.humans[0].constraints[0]
+    constraint.in_policy_doc = documented
+    if not documented:
+        scenario.policy_doc = "Project policy\n"
+    scenario.humans[0].constraints.append(constraint.model_copy(update={
+        "constraint_id": "undocumented", "tag": "private_tag", "in_policy_doc": False,
+        "description": "Undocumented requirement.",
+    }))
     e = ExecEnv(scenario)
-    q = "Which mobile platforms are required?"
-    result = act(e, "ask_human", human_id="pm", question=q)
-    assert result.action_result["constraints"][0]["tag"] == "mobile_compat"
-    assert e.patience["pm"] == 4
-    act(e, "ask_human", human_id="pm", question=q)
-    assert e.patience["pm"] == 2
-    act(e, "ask_human", human_id="pm", question=q)
-    assert not act(e, "ask_human", human_id="pm", question=q).action_result["constraints"]
+    before = (e.tick, e.compute, dict(e.patience))
+    result = act(e, "read_policy_doc").action_result
+    expected = [{"tag": constraint.tag, "description": constraint.description}] if documented else []
+    assert result == {"policy_doc": scenario.policy_doc, "constraints": expected}
+    assert (e.tick, e.compute, e.patience) == before
+    assert e.revealed == ({constraint.tag} if documented else set())
+    assert act(e, "read_policy_doc").action_result == result
+    flags = [c["tag"] for c in result["constraints"]]
+    assert not act(e, "assign", ic_id="ic_0", task_id="t0", spec_detail=3, spec_flags=flags).errors
+    for _ in range(3):
+        act(e, "wait")
+    assert e.work["t0"].status == "done_true"
+    _, details = raw_outcome(e.hidden(), scenario)
+    assert details["violated_constraints"] == ([] if documented else [constraint.tag])
+
+
+def test_human_repeated_questions_use_word_cost(scenario):
+    e = ExecEnv(scenario)
+    for remaining in range(4, -1, -1):
+        result = act(e, "ask_human", human_id="pm", task_id="t0", question="Which mobile platforms?")
+        assert result.action_result["constraints"][0]["tag"] == "mobile_compat"
+        assert e.patience["pm"] == remaining
+    result = act(e, "ask_human", human_id="pm", task_id="t0", question="Which mobile platforms?")
+    assert result.action_result["constraints"] == []
+
+
+@pytest.mark.parametrize("words,cost", [(0, 1), (1, 1), (20, 1), (21, 2), (40, 2), (41, 3)])
+def test_human_word_cost(scenario, words, cost):
+    e = ExecEnv(scenario)
+    question = " \n\t".join(["mobile"] * words)
+    act(e, "ask_human", human_id="pm", task_id="t0", question=question)
+    assert e.patience["pm"] == 5 - cost
+    assert e.tick == 0
+    assert e.compute == 100
+
+
+def test_human_insufficient_patience(scenario):
+    scenario.humans[0].patience = 1
+    e = ExecEnv(scenario)
+    result = act(e, "ask_human", human_id="pm", task_id="t0", question="mobile " * 21)
+    assert result.action_result["constraints"] == []
+    assert e.patience["pm"] == 0
+    assert not e.revealed
+
+
+def test_human_task_scope_and_question_matching(scenario):
+    scenario.tasks[1].required_spec_flags = ["retention_limit"]
+    scenario.humans[0].constraints.append(scenario.humans[0].constraints[0].model_copy(update={
+        "constraint_id": "retention", "tag": "retention_limit", "description": "Retain for 30 days.",
+        "revealed_by": ["risks"],
+    }))
+    e = ExecEnv(scenario)
+    question = "What mobile and retention requirements apply?"
+    for task_id, expected in [("t0", "mobile_compat"), ("t1", "retention_limit")]:
+        result = act(e, "ask_human", human_id="pm", task_id=task_id, question=question)
+        assert [c["tag"] for c in result.action_result["constraints"]] == [expected]
+    result = act(e, "ask_human", human_id="pm", task_id="t0", question="When is the deadline?")
+    assert result.action_result["constraints"] == []
+    # A discovered tag can still be used on another applicable task without asking again.
+    assign(e, task="t2")
+    assert e.work["t2"].spec_flags == ["mobile_compat"]
+
+
+@pytest.mark.parametrize("args", [
+    {"human_id": "pm", "question": "mobile"},
+    {"human_id": "pm", "task_id": "unknown", "question": "mobile"},
+    {"human_id": "unknown", "task_id": "t0", "question": "mobile"},
+])
+def test_human_invalid_target_does_not_spend_patience(scenario, args):
+    e = ExecEnv(scenario)
+    result = act(e, "ask_human", **args)
+    assert result.errors
+    assert e.patience["pm"] == 5
+    assert e.questions["pm"] == []
 
 
 def decision(**kwargs):
@@ -150,12 +226,41 @@ def test_reassign_cancel_feedback(scenario):
     assign(e)
     act(e, "wait")
     old = e.work["t0"].progress
-    assert act(e, "feed_back", ic_id="ic_0", text="Improve").errors
+    assert act(e, "coach_ic", ic_id="ic_0", text="Improve").errors
     act(e, "reassign", task_id="t0", new_ic_id="ic_1")
     assert e.work["t0"].progress == pytest.approx(old * 0.7)
     act(e, "cancel", task_id="t0")
-    assert not act(e, "feed_back", ic_id="ic_1", text="Improve").errors
+    assert not act(e, "coach_ic", ic_id="ic_1", text="Improve").errors
     assert e.feedback
+
+
+@pytest.mark.parametrize("eligible", [False, True])
+def test_feedback_cannot_update_work_or_adapt_ic(scenario, eligible):
+    e = ExecEnv(scenario)
+    assign(e)
+    if eligible:
+        for _ in range(3):
+            act(e, "wait")
+        assert "ic_0" in e.feedback_eligible
+    control = copy.deepcopy(e)
+    text = "Incorporate explicit consent and retention_limit into the deliverable."
+    result = act(e, "coach_ic", ic_id="ic_0", text=text)
+    if eligible:
+        assert result.action_result == {
+            "recorded": True, "effect": "coaching_recorded_only", "task_state_changed": False,
+        }
+        assert e.feedback[-1]["text"] == text
+    else:
+        assert "coach_ic records IC coaching only" in result.errors[0]
+        assert not e.feedback
+    assert e.work == control.work
+    assert e.ics == control.ics
+    assert e.tick == control.tick
+    # Recorded prose must not affect subsequent simulated work either.
+    act(e, "wait")
+    act(control, "wait")
+    assert e.work == control.work
+    assert e.ics == control.ics
 
 
 def test_spam_guard_and_deadline(scenario):

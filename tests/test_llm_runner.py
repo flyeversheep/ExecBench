@@ -1,4 +1,5 @@
 import json
+import time
 
 import httpx
 import pytest
@@ -8,6 +9,93 @@ from execbench.policies.llm_policy import LLMPolicy
 from execbench.runner.leaderboard import leaderboard
 from execbench.runner.run_benchmark import run_benchmark
 from execbench.runner.run_episode import run_episode
+from execbench.schemas import tool_schemas
+
+
+@pytest.mark.parametrize("provider", ["openai", "anthropic"])
+def test_single_tool_request_and_cache(monkeypatch, tmp_path, provider):
+    requests = []
+
+    def post(url, **kwargs):
+        requests.append(kwargs["json"])
+        return httpx.Response(200, json=(
+            {"content": [{"type": "text", "text": "ok"}]}
+            if provider == "anthropic" else {"choices": [{"message": {"content": "ok"}}]}
+        ))
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("model", provider=provider, api_key="test", cache_dir=tmp_path)
+    messages = [{"role": "user", "content": "go"}]
+    client.complete(messages)
+    result = client.complete(messages, tools=tool_schemas())
+    assert client.complete(messages, tools=tool_schemas())["cached"]
+    assert len(requests) == 2
+    assert "tool_choice" not in requests[0]
+    assert "parallel_tool_calls" not in requests[0]
+    if provider == "anthropic":
+        assert requests[1]["tool_choice"] == {"type": "any", "disable_parallel_tool_use": True}
+        assert "parallel_tool_calls" not in requests[1]
+    else:
+        assert requests[1]["tool_choice"] == "required"
+        assert requests[1]["parallel_tool_calls"] is False
+    saved = json.loads((tmp_path / f"{result['cache_key']}.json").read_text())
+    assert saved["request"]["request"] == requests[1]
+
+
+@pytest.mark.parametrize("rejected, error", [
+    ([{"name": "ship", "args": {}}, {"name": "wait", "args": {}}], "returned 2 tool calls"),
+    ([], "returned 0 tool calls"),
+    ([{"name": "audit", "args": {"task_id": "task_0"}}],
+     "audit: missing arguments ['ic_id']; unexpected arguments ['task_id']"),
+    ([{"name": "audit", "args": {"ic_id": 5}}], "audit.ic_id: expected string"),
+    ([{"name": "audit", "args": "not JSON"}], "args"),
+    ([{"name": "unknown", "args": {}}], "name"),
+    ([{"name": "feed_back", "args": {"ic_id": "ic_0", "text": "Improve"}}], "name"),
+    ([{"name": "assign", "args": {
+        "ic_id": "ic_a", "task_id": "task_0", "spec_detail": 12, "spec_flags": [],
+    }}], "assign.spec_detail: expected an integer from 0 to 3"),
+])
+def test_rejected_calls_recover_without_advancing_or_executing(scenario, rejected, error):
+    class RecoveringClient:
+        def __init__(self):
+            self.calls = []
+
+        def complete(self, messages, **kwargs):
+            calls = rejected if not self.calls else [{"name": "ship", "args": {}}]
+            result = {"tool_calls": calls, "text": "proposal", "messages": messages}
+            self.calls.append(result)
+            return result
+
+    client = RecoveringClient()
+    trace = run_episode(scenario, LLMPolicy(client), grade=False)
+    assert len(client.calls) == 2
+    assert len(client.calls[0]["messages"]) == 2  # Retry must not mutate earlier trace requests.
+    feedback = client.calls[1]["messages"][-1]["content"]
+    assert error in feedback
+    assert "No tool calls were executed" in feedback
+    assert "simulation has not advanced" in feedback
+    assert len(trace.steps) == 2
+    assert trace.steps[-1].action.name == "ship"
+    assert trace.steps[-1].observation.tick == 0
+    assert len(trace.steps[-1].llm_calls) == 2
+
+
+def test_repeated_batches_still_fail_atomically(scenario):
+    class BatchClient:
+        def __init__(self):
+            self.calls = []
+
+        def complete(self, *args, **kwargs):
+            result = {"tool_calls": [{"name": "ship", "args": {}}] * 2, "text": ""}
+            self.calls.append(result)
+            return result
+
+    client = BatchClient()
+    scenario.budgets.max_ticks = 1
+    trace = run_episode(scenario, LLMPolicy(client))
+    assert len(client.calls) == 3 * (len(trace.steps) - 1)
+    assert all(step.action.name == "wait" for step in trace.steps[1:])
+    assert trace.scores["parse_forced_wait_rate"] == 1
 
 
 def test_openai_cache_redaction_usage_and_tool_parsing(monkeypatch, tmp_path):
@@ -42,6 +130,40 @@ def test_openai_cache_redaction_usage_and_tool_parsing(monkeypatch, tmp_path):
     assert len(requests) == 1
     assert "private-secret-sentinel" not in json.dumps(a.calls)
     assert "private-secret-sentinel" not in next(tmp_path.glob("*.json")).read_text()
+
+
+def test_reasoning_effort_set_for_reasoning_models_only(monkeypatch, tmp_path):
+    requests = []
+
+    def post(url, **kwargs):
+        requests.append(kwargs["json"])
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}], "usage": {}},
+        )
+
+    monkeypatch.setattr(httpx, "post", post)
+    kwargs = {"api_key": "test", "cache_dir": tmp_path, "base_url": "https://api.openai.com/v1"}
+    LLMClient("gpt-5", **kwargs).complete([{"role": "user", "content": "go"}])
+    LLMClient("gpt-4o", **kwargs).complete([{"role": "user", "content": "go"}])
+    assert requests[0]["reasoning_effort"] == "minimal"
+    assert "reasoning_effort" not in requests[1]
+    # Reasoning models reject max_tokens and temperature=0; non-reasoning models still take both.
+    assert requests[0]["max_completion_tokens"] == 2048
+    assert "max_tokens" not in requests[0]
+    assert "temperature" not in requests[0]
+    assert requests[1]["max_tokens"] == 2048
+    assert requests[1]["temperature"] == 0
+
+
+def test_lowest_reasoning_effort_matches_the_model_family():
+    from execbench.llm.client import reasoning_effort_for
+
+    # The gpt-5 family takes "minimal" and 400s on "none"; gpt-5.1+ is the reverse.
+    for model in ("gpt-5", "gpt-5-nano", "gpt-5-mini", "gpt-5-2025-08-07", "gpt-5-nano-2025-08-07"):
+        assert reasoning_effort_for(model) == "minimal", model
+    for model in ("gpt-5.1", "gpt-5.2", "gpt-5.4-nano", "gpt-5.4-nano-2026-03-17", "gpt-5.5"):
+        assert reasoning_effort_for(model) == "none", model
 
 
 def test_anthropic_adapter(monkeypatch, tmp_path):
@@ -114,6 +236,63 @@ def test_benchmark_resume_and_manifest(scenario, tmp_path):
         run_benchmark(source, ["heuristic"], out)
 
 
+def test_z_ai_thinking_flag_skipped_for_forced_reasoning_models(monkeypatch, tmp_path):
+    """GLM-5.3 rejects any `thinking` object (HTTP 400, code 1210); it wants reasoning_effort."""
+    requests = []
+
+    def post(url, **kwargs):
+        requests.append(kwargs["json"])
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}], "usage": {}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    kwargs = {"api_key": "test", "cache_dir": tmp_path, "base_url": "https://api.z.ai/api/paas/v4"}
+    # Mixed case, because Z.ai matches model ids case-insensitively.
+    LLMClient("GLM-5.3-Flash", **kwargs).complete([{"role": "user", "content": "go"}])
+    LLMClient("glm-4.5-flash", **kwargs).complete([{"role": "user", "content": "go"}])
+    assert "thinking" not in requests[0]
+    assert requests[0]["reasoning_effort"] == "low"
+    assert requests[1]["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in requests[1]
+
+
+def test_provider_error_code_is_surfaced_without_the_body(monkeypatch, tmp_path):
+    def post(*args, **kwargs):
+        return httpx.Response(400, json={"error": {"code": "1210", "message": "secret-sentinel"}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("glm-5.3-flash", api_key="test", cache_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="HTTP 400, provider code 1210") as excinfo:
+        client.complete([{"role": "user", "content": "go"}])
+    assert "secret-sentinel" not in str(excinfo.value)
+
+
+def test_underscored_provider_error_code_is_surfaced(monkeypatch, tmp_path):
+    """OpenAI spells codes with underscores; they must survive the redaction filter."""
+    calls = []
+
+    def post(*args, **kwargs):
+        calls.append(1)
+        return httpx.Response(429, json={"error": {"code": "rate_limit_exceeded"}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("gpt-5-nano", api_key="test", cache_dir=tmp_path)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    with pytest.raises(RuntimeError, match="HTTP 429, provider code rate_limit_exceeded"):
+        client.complete([{"role": "user", "content": "go"}])
+    assert len(calls) == 3
+
+
+def test_malformed_provider_error_code_is_dropped(monkeypatch, tmp_path):
+    def post(*args, **kwargs):
+        return httpx.Response(400, json={"error": {"code": "leaked body: " + "x" * 500}})
+
+    monkeypatch.setattr(httpx, "post", post)
+    client = LLMClient("model", api_key="test", cache_dir=tmp_path)
+    with pytest.raises(RuntimeError, match=r"HTTP 400 \(model\)\.") as excinfo:
+        client.complete([{"role": "user", "content": "go"}])
+    assert "leaked" not in str(excinfo.value)
+
+
 def test_balance_failure_is_not_retried(monkeypatch, tmp_path):
     from execbench.llm.client import LLMBalanceError
 
@@ -151,3 +330,56 @@ def test_benchmark_stops_queued_work_on_empty_balance(scenario, tmp_path, monkey
     assert len(rows) < 20
     assert all(r["error_kind"] == "account_balance" for r in rows)
     assert json.loads((out / "run_status.json").read_text())["status"] == "blocked_account_balance"
+
+
+def test_grader_model_default_and_opt_out(monkeypatch):
+    from execbench.llm.client import DEFAULT_GRADER_MODEL, build_grader_client, resolve_grader_model
+
+    monkeypatch.delenv("EXECBENCH_GRADER_MODEL", raising=False)
+    assert resolve_grader_model(None) == DEFAULT_GRADER_MODEL == "glm-4.7-flash"
+    assert resolve_grader_model("glm-4.7") == "glm-4.7"
+    assert resolve_grader_model("none") is None
+    assert resolve_grader_model("") is None
+    monkeypatch.setenv("EXECBENCH_GRADER_MODEL", "glm-5")
+    assert resolve_grader_model(None) == "glm-5"
+    monkeypatch.setenv("EXECBENCH_GRADER_MODEL", "none")
+    assert resolve_grader_model(None) is None
+    assert build_grader_client(None) is None
+
+
+@pytest.mark.parametrize("memory_model", [None, "memory-model"])
+def test_memory_generation_uses_grader_api(monkeypatch, tmp_path, memory_model):
+    from typer.testing import CliRunner
+
+    from execbench import cli
+    from execbench.llm import client as client_module
+
+    for name, value in {
+        "PROVIDER": "openai", "BASE_URL": "https://policy.example/v1",
+        "API_KEY": "policy-test-key", "API_KEY_REF": "policy-test-ref",
+        "GRADER_PROVIDER": "anthropic", "GRADER_BASE_URL": "https://grader.example/v1",
+        "GRADER_API_KEY": "grader-test-key", "GRADER_API_KEY_REF": "grader-test-ref",
+    }.items():
+        monkeypatch.setenv(f"EXECBENCH_{name}", value)
+    captured = []
+    sentinel = object()
+
+    def build(model, **kwargs):
+        captured.append((model, kwargs))
+        return sentinel
+
+    def generate(out, count, seed, client, config):
+        assert client is (sentinel if memory_model else None)
+        return []
+
+    monkeypatch.setattr(client_module, "LLMClient", build)
+    monkeypatch.setattr(cli, "generate_set", generate)
+    args = ["generate", "--out", str(tmp_path)]
+    if memory_model:
+        args += ["--memory-model", memory_model]
+    result = CliRunner().invoke(cli.app, args)
+    assert result.exit_code == 0, result.output
+    assert captured == ([("memory-model", {
+        "provider": "anthropic", "base_url": "https://grader.example/v1",
+        "api_key": "grader-test-key", "api_key_ref": "grader-test-ref",
+    })] if memory_model else [])

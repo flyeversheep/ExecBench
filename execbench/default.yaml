@@ -1,6 +1,7 @@
 audit_cost: 2.0
 reassign_cost: 1.0
 spec_detail_cost: 0.25
+spec_flag_cost: 0.25
 work_cost: 1.0
 max_actions_per_tick: 40
 progress_noise: 0.02

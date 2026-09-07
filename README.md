@@ -28,10 +28,19 @@ This writes full traces under a directory named for the implementation hash in `
 
 ## Live LLM evaluation
 
-Credentials are read into process memory, never written into traces or caches. Unlock 1Password and enable/approve its CLI integration first.
+Supply a credential either way — export the key directly, or point at a 1Password secret reference. Credentials are read into process memory only, and are never written into traces or caches.
 
 ```sh
+# Option A — the API key directly in the environment
+export EXECBENCH_API_KEY='your-api-key'
+
+# Option B — a 1Password secret reference, resolved at first use with `op read`
 export EXECBENCH_API_KEY_REF='op://AI agents/Z.ai API/credential'
+```
+
+Either one is enough; pick whichever fits your setup. If both are set, the direct key wins. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are also read for the matching provider, so an existing shell setup often needs no extra variable. For option B, install the [1Password CLI](https://developer.1password.com/docs/cli/get-started/), unlock the 1Password app, and enable/approve its CLI integration before running — otherwise `op read` fails or times out.
+
+```sh
 export EXECBENCH_BASE_URL='https://api.z.ai/api/paas/v4'
 uv run execbench check-api --model glm-4.7
 uv run python scripts/validate_live_graders.py --model glm-4.7
@@ -49,15 +58,26 @@ Alternatively, `scripts/run_live_demo.py` performs API preflights, validates the
 
 | Setting | Purpose |
 |---|---|
-| `EXECBENCH_API_KEY_REF` | 1Password secret reference, resolved with `op read` |
-| `EXECBENCH_API_KEY` | Direct environment credential, takes precedence over the reference |
+| `EXECBENCH_API_KEY` | Direct environment credential; takes precedence over the reference |
+| `EXECBENCH_API_KEY_REF` | Alternative to the above: a 1Password secret reference, resolved with `op read` (requires the 1Password CLI) |
 | `EXECBENCH_PROVIDER` | `openai` for OpenAI-compatible HTTP, or `anthropic` |
 | `EXECBENCH_BASE_URL` | Provider endpoint; defaults to Z.ai, or Anthropic for that provider |
+| `EXECBENCH_GRADER_MODEL` | Default judge model when `--grader-model` is not given; defaults to `glm-4.7-flash`. Set either to `none` to score without an LLM |
+| `EXECBENCH_GRADER_PROVIDER`, `EXECBENCH_GRADER_BASE_URL`, `EXECBENCH_GRADER_API_KEY`, `EXECBENCH_GRADER_API_KEY_REF` | Same meaning as the unprefixed settings, for both `--grader-model` and `--memory-model`; each falls back to its unprefixed counterpart when unset, so the grader can run against a different provider/credential than the policy model |
 | `EXECBENCH_CACHE_DIR` | Content-addressed cache, default `.cache/llm` |
 | `EXECBENCH_HISTORY_CHARS` | Recent-history window, default 60,000 characters; older turns become a compact action/result journal |
 | `EXECBENCH_PRICES_JSON` | Per-model input/output prices in USD per million tokens, e.g. `{"model":{"input":0.6,"output":2.2}}` |
 
-`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are also accepted. The adapters use `httpx` directly, so provider SDKs are unnecessary. The Anthropic adapter uses its native [tool-use contract](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools).
+The adapters use `httpx` directly, so provider SDKs are unnecessary. The Anthropic adapter uses its native [tool-use contract](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools).
+
+Tool requests enforce the one-action-per-turn contract: OpenAI-compatible requests send
+`tool_choice="required"` with `parallel_tool_calls=false`; Anthropic requests send
+`tool_choice={"type":"any","disable_parallel_tool_use":true}`. Responses are still validated
+locally in case a compatible endpoint ignores the setting. Rejected batches execute nothing;
+retries include the call count or argument error and do not advance the simulation. After three
+invalid responses, the existing forced-wait rule applies. These request settings are recorded in
+traces and included in cache keys. Compare the corrected interface using a new results directory;
+old benchmark results remain evidence of the previous interface.
 
 Token usage is always recorded. Dollar values are **estimates** based on explicitly configured prices; without prices, `llm_cost_known=0` and the leaderboard omits the dollar estimate. Provider cache discounts, tiered pricing, and taxes are not inferred. Local cache hits have zero additional API spend. Grader tokens and estimated spend are recorded separately. Check [current provider pricing](https://docs.z.ai/guides/overview/pricing) before populating price settings.
 
@@ -71,7 +91,7 @@ uv run execbench generate --out scenarios/llm-memory --count 50 --seed 1000 --me
 
 Six YAML templates cover rate limiting, recommendations, logging migration, data export, onboarding, and billing. Seeds 1000–1049 span five difficulty levels, ten per level. Generation runs the privileged reference once to estimate usage/deadline and again under the calibrated budget to record its outcome. Every scenario includes simulator constants, generation provenance, hidden memory events, and rendered memory.
 
-The supplied set uses deterministic memory templates. `--memory-model` enables cached rendering and validation; invalid rendering falls back to templates. Keep the generation cache alongside any LLM-rendered scenario set you distribute. Template generation makes no LLM calls and needs no cache files.
+The supplied set uses deterministic memory templates. `--memory-model` enables cached rendering and validation using the grader provider, endpoint, and credentials (`EXECBENCH_GRADER_*`, falling back to the unprefixed settings). The supplied model name selects the memory model independently of `EXECBENCH_GRADER_MODEL`; invalid rendering falls back to templates. Keep the generation cache alongside any LLM-rendered scenario set you distribute. Template generation makes no LLM calls and needs no cache files.
 
 All stochastic simulation uses NumPy generators derived from the scenario seed and a stable named stream. Work draws depend on task, IC, and tick, so extra status/audit calls cannot perturb the work RNG. Gzip traces have a fixed timestamp. Scenario regeneration is byte-identical under the locked dependencies; LLM behavior is reproducible with the same response cache. Accounting fields distinguish original calls from cache replays.
 
@@ -81,7 +101,11 @@ Resume manifests check scenario hashes, package and prompt hashes, provider sett
 
 `ExecEnv.reset()` and `ExecEnv.step(Action(...))` return an `Observation`. After termination, `ExecEnv.trace()` returns the full `EpisodeTrace`; this keeps the step return type stable. The runner attaches the scorecard and writes JSON or deterministic gzip.
 
-The frozen action names are `read_policy_doc`, `ask_human`, `assign`, `status`, `audit`, `reassign`, `cancel`, `escalate`, `feed_back`, `report`, `wait`, and `ship`. Argument schemas are generated from the single contract in `schemas.py`. `assign` supports optional `force=false`, as described in the plan's semantics. A maximum of 40 actions per tick prevents infinite free-action loops.
+The frozen action names are `read_policy_doc`, `ask_human`, `assign`, `status`, `audit`, `reassign`, `cancel`, `escalate`, `coach_ic`, `report`, `wait`, and `ship`. Argument schemas are generated from the single contract in `schemas.py`. `assign` supports optional `force=false`, as described in the plan's semantics. A maximum of 40 actions per tick prevents infinite free-action loops.
+
+`coach_ic` records evidence-based IC coaching to identify weaknesses and improve future working or reporting practices. It is eligible after that IC has a claimed-done or cancelled task and is evaluated at episode end. It does not change task requirements, progress, quality, blockers, or IC behavior during the episode. Put task requirements in `assign.spec_flags`; feedback cannot update an existing assignment or request rework.
+
+`coach_ic` replaces the former `feed_back` action. New policies must use `coach_ic`; `feed_back` is no longer executable or exposed to agents. Historical traces retain their original action names and remain readable, renderable, and gradable. Stored feedback records and coaching score names are unchanged.
 
 Public models are constructed by explicit field copying. Hidden persona labels, competence, task size, exact quality, undisclosed flags, memory IDs, decision labels, and generation logs are never serialized into ordinary observations. The oracle is intentionally privileged. Audits disclose only the specified truthful progress, completion, quality estimate, and blocked state.
 
@@ -116,7 +140,7 @@ No composite score is produced.
 | Stale trust | Never-audited ICs with decayed feedback at least 60 days old |
 | Efficiency | Compute, patience, ticks, action counts, token usage, configured cost estimates, and forced parse-failure waits |
 
-Without `--grader-model`, nonempty reports and feedback requiring judgments are explicitly ungraded. Empty reports and missing coaching can be scored zero without an LLM. The leaderboard marks partial metric coverage as `[graded/episodes]`; JSON includes every metric's sample count. Baseline zeros do not imply that live grader acceptance has passed.
+Grading defaults to `glm-4.7-flash`; pass `--grader-model none` (or set `EXECBENCH_GRADER_MODEL=none`) to run without a judge. With no grader model, nonempty reports and feedback requiring judgments are explicitly ungraded. Empty reports and missing coaching can be scored zero without an LLM. The leaderboard marks partial metric coverage as `[graded/episodes]`; JSON includes every metric's sample count. Baseline zeros do not imply that live grader acceptance has passed.
 
 ## Findings from the bundled baseline run
 
@@ -135,3 +159,11 @@ The offline suite covers formulas, all six personas, dependencies, budgets, inci
 Run `uv run pytest -q` and `uv run ruff check execbench tests scripts`. The viewer has also been inspected in a browser. `scripts/validate_live_graders.py` contains five report and five feedback acceptance examples. All five live grader acceptance checks passed, including honesty ordering and feedback ordering. The 76 completed live model episodes had zero parse-failure forced waits across 2,652 actions. Actual narrative grading has [documented limitations](demo/live-resumed/GRADING_NOTES.md), despite passing the synthetic checks. Full model completion across 50 scenarios and the complete 3-model leaderboard remain pending API credit. The latest offline suite has 40 passing tests, including non-retryable balance-error handling.
 
 L1 document workers, L2 repository workers, persona adaptation to episode feedback, cross-episode learning, and human-rater validation remain outside v0.1.
+
+`ask_human(human_id, task_id, question)` reveals only keyword-matched constraints owned by that human and required by the specified task. Discovered tags may be reused on other applicable tasks. Questions cost one patience per 20 whitespace-delimited words, rounded up (minimum one), replacing the duplicate-question surcharge. If the cost exceeds remaining patience, the balance is exhausted and the answer is minimal. Unknown task IDs are rejected without spending patience.
+
+When a grader LLM is configured, ask_human questions must pass its readability check before any information is revealed. Ask coherent, natural questions; keyword stuffing or instructions to manipulate the judge are rejected and still consume the normal word-based patience cost. Readable multi-part questions are allowed. Runs without a grader skip this check and are marked unchecked in trace.grading.question_readability.
+
+Assignment flag cost: `SimConfig.spec_flag_cost` (default 0.25 compute, nonnegative) is charged for every distinct flag in each accepted assignment, in addition to specification detail. The public observation exposes `costs.per_spec_flag`. Duplicate flags are stored and charged once. Charges do not depend on hidden relevance. Reassigning an existing work item does not reapply this charge; cancelling and assigning again does.
+
+The end-of-episode `specification_precision` diagnostic is the number of applicable flags divided by all flags across accepted assignments, deduplicated within each assignment. Cancelled/replaced assignments remain included; rejected assignments are excluded. `specification_flag_count` and `specification_relevant_flag_count` report the denominator and numerator. With no flags, precision is undefined and omitted. This metric is separate from outcome; flag costs affect outcome through the compute budget. Regenerate scenarios with stored oracle outcomes and rerun benchmarks when comparing under the new cost semantics.

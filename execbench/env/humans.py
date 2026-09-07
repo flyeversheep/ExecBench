@@ -1,5 +1,3 @@
-import re
-
 KEYWORDS = {
     "users": ["user", "customer", "audience", "accessib"],
     "platforms": ["platform", "mobile", "browser", "device", "compat"],
@@ -16,19 +14,20 @@ def classify(question):
     return {intent for intent, words in KEYWORDS.items() if any(w in lower for w in words)} or {"other"}
 
 
-def duplicate(question, previous):
-    words = set(re.findall(r"\w+", question.lower()))
-    return any(len(words & old) / max(1, len(words | old)) >= 0.7 for old in previous)
+def question_cost(question):
+    # Words are whitespace-delimited; even an empty question costs one patience.
+    return max(1, (len(question.split()) + 19) // 20)
 
 
-def answer(human, question, remaining, previous, config, rng, weights):
-    cost = 2 if duplicate(question, previous) else 1
-    previous.append(set(re.findall(r"\w+", question.lower())))
-    if remaining <= 0:
+def answer(human, question, task, remaining, config, rng, weights):
+    cost = question_cost(question)
+    if remaining < cost:
         return {"answer": "Use your judgment.", "constraints": []}, cost
     intents = classify(question)
     revealed = []
     for c in human.constraints:
+        if c.tag not in task.required_spec_flags:
+            continue
         specific = any(part in question.lower() for part in c.tag.split("_") if len(part) > 3)
         if (intents.intersection(c.revealed_by) or specific) and rng.random() < (
             1 if specific else config.reveal_prob

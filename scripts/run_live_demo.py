@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from execbench.llm.client import LLMClient
+from execbench.llm.client import DEFAULT_GRADER_MODEL, LLMClient
 from execbench.runner.leaderboard import leaderboard
 from execbench.runner.run_benchmark import run_benchmark
 
@@ -13,7 +13,7 @@ from execbench.runner.run_benchmark import run_benchmark
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--models", default="glm-5.1,glm-5,glm-4.7")
-    parser.add_argument("--grader-model", default="glm-4.7")
+    parser.add_argument("--grader-model", default=DEFAULT_GRADER_MODEL)
     parser.add_argument("--scenario-set", default="scenarios/v0")
     parser.add_argument("--out", default="results/live-demo")
     parser.add_argument("--workers", type=int, default=8)

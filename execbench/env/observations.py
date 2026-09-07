@@ -63,6 +63,7 @@ def observe(env, result=None, errors=None, reset=False):
             "audit": env.scenario.config.audit_cost,
             "reassign": env.scenario.config.reassign_cost,
             "per_spec_level": env.scenario.config.spec_detail_cost,
+            "per_spec_flag": env.scenario.config.spec_flag_cost,
             "max_actions_per_tick": env.scenario.config.max_actions_per_tick,
         },
         roster=roster,

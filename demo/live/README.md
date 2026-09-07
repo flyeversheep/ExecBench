@@ -23,7 +23,7 @@ The live run exposed and fixed two integration issues: the grader sometimes emit
 After adding API credit, resume from the repository root:
 
 ```sh
-export EXECBENCH_API_KEY_REF='op://AI agents/Z.ai API/credential'
+export EXECBENCH_API_KEY='your-api-key'   # or EXECBENCH_API_KEY_REF='op://AI agents/Z.ai API/credential'
 export EXECBENCH_PRICES_JSON='{"glm-5.1":{"input":1.4,"output":4.4},"glm-5":{"input":1.0,"output":3.2},"glm-4.7":{"input":0.6,"output":2.2}}'
 uv run python scripts/run_live_demo.py --workers 6 --out results/live-demo-resumed
 uv run python scripts/summarize_live.py --results results/live-demo-resumed --out demo/live-complete

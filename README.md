@@ -1,5 +1,7 @@
 # ExecBench
 
+**Reviewing this project for an interview?** Start with the [interviewer walkthrough](README_INTERVIEW.md) for the problem framing, design decisions, tool use, testing, and limitations.
+
 **An evaluation environment for AI executive agents.** The model manages a project through simulated workers; it never implements the deliverables. Hidden worker behavior, stakeholder constraints, incidents, and priority changes provide structured ground truth for management decisions.
 
 The L0 implementation runs locally. The repository includes **50 fixed-seed scenarios, five scripted policies, 250 baseline results, and three standalone trace viewers**. Live API access now works and all live grader acceptance checks passed. The [resumed live run report](demo/live-resumed/REPORT.md) records **76 model episodes and 132 live-graded baseline episodes** completed before Z.ai again reported insufficient balance (code 1113). The run is stopped at 208/350 episodes. Matched-scenario comparisons and cumulative API cost estimates are available; full 50-scenario coverage remains pending.

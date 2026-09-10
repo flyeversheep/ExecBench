@@ -20,6 +20,8 @@ The unit of evaluation is a **management decision under partial information**. A
 
 The first implementation deliberately uses simulated work. This makes progress, quality, hidden requirements, and misleading reports observable to the evaluator while keeping them hidden from the agent. It also allows inexpensive, repeatable experiments before introducing real document or repository workers.
 
+ExecBench does not yet target a unified API or interface for AI executives. Its action and observation contracts are working assumptions for testing the concept, with general management operations intended to support adaptation to future real-world workflows. These contracts are provisional: integrating real workers and tools may require revising both the interface and the assumptions behind it.
+
 Success is measured across outcome, escalation, detection, verification, reporting, coaching, memory use, and efficiency. There is no composite score: a single number would hide tradeoffs such as more detection at the expense of delivery. The simulator's compute budget and actual API token/spend accounting are separate quantities.
 
 ## Design decisions and tradeoffs

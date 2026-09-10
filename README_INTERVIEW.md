@@ -110,6 +110,43 @@ CI configuration is in [test.yml](.github/workflows/test.yml) and uses Python 3.
 
 Historical live evidence is more limited: the [September 5 report](demo/live-resumed/REPORT.md) records 208/350 completed episodes, including 76 executive-model episodes, before API balance depletion. Its 15-scenario matched comparison reports normalized outcome of 0.894 for GLM-5, 0.816 for GLM-5.1, and 0.793 for GLM-4.7. These are descriptive results from an incomplete, within-provider run, not a current model ranking or a result reproduced by this documentation update.
 
+## Failure analysis: where models lose credit
+
+The `dev_v15` run contains **10 completed episodes: two models on the same five scenarios, one per difficulty level**. These examples come from saved trajectories, not new model calls. [Run metadata and selected traces](demo/dev-v15/README.md) are included for inspection. They describe failure mechanisms in this small development set, not their prevalence across models. Step numbers below are the trace's `index`; ticks are simulated time.
+
+**Score attribution matters.** Outcome is `(weighted completed quality − requirement penalties − incident penalties) / oracle_outcome`. Incomplete tasks contribute zero delivered value. Detection, escalation, specification precision, report honesty, and coaching are separate metrics; their low scores are not additional outcome deductions. Differences between two trajectories are observational, while the explicit penalty terms below are exact accounting within the saved episode.
+
+| Failure category | Observed decision and evidence | How it costs credit |
+|---|---|---|
+| **Slow recovery of a blocked dependency** | In L4 logging migration, Luna reassigns the blocked inventory task only at step 26 / tick 9. The ingestion adapter starts at tick 11 and is only **38.4% complete** when Luna ships at tick 14. Terra reassigns at tick 3 and completes the adapter at tick 9. [Luna trace](demo/dev-v15/l4_01030__gpt-5.6-luna.json.gz), [Terra trace](demo/dev-v15/l4_01030__gpt-5.6-terra.json.gz). | Luna completes **4/8 planned tasks**, versus Terra's 8/8; both also complete the incident task. Normalized outcome is **0.568 vs 0.912**. Unfinished work earns no delivered value. Earlier recovery is a plausible contributor to the gap, but staffing and specifications also differ. |
+| **Missing an operational deadline despite eventual completion** | In L2, Luna's incident assignment at step 12 / tick 2 is rejected because the worker is busy; the successful assignment is at tick 9. Terra succeeds at tick 5. The incident requires assignment **strictly before tick 5**. [Luna trace](demo/dev-v15/l2_01010__gpt-5.6-luna.json.gz), [Terra trace](demo/dev-v15/l2_01010__gpt-5.6-terra.json.gz). | Both incur an incident penalty of **0.600 raw outcome**, or **0.136 normalized outcome** using the reference of 4.399. Completing mitigation later does not erase a missed response deadline. An attempted assignment is not an accepted assignment. |
+| **Failing to translate requirements into task specifications** | L2 Terra assigns every task with empty `spec_flags`, including documentation and work requiring consent. L2 Luna applies `explicit_consent` broadly but omits the documentation accessibility requirement. | Terra loses **0.422 raw outcome** to `accessible_docs` and `explicit_consent` violations. Luna loses **0.162** to accessibility and has specification precision **2/6 = 0.333**. Extra irrelevant flags cost compute without satisfying the missing requirement. Precision measures relevance of supplied flags, not completeness of requirements coverage. |
+| **Accepting a completion claim without checking current work** | L5 Terra reports readiness at step 39 and ships at step 40 / tick 16. `task_8` is still `done_claimed`, with true progress **92.4%** and no completed quality. Its only audit was earlier, at tick 9, before this task was assigned at tick 11. [Terra trace](demo/dev-v15/l5_01040__gpt-5.6-terra.json.gz). | `task_8` contributes **zero delivered value** despite the completion claim. Episode outcome is **0.742**. A previous audit of a worker does not verify a later assignment; the trace does not establish what quality or outcome an extra wait would have produced. |
+| **Escalating decisions that do not need stakeholders** | L5 Terra escalates the tabs-versus-spaces questions at steps 13 and 21, as well as all three genuinely escalation-worthy decisions. | **TP=3, FP=2, FN=0** yields precision **0.600**, recall **1.000**, and F1 **0.750**. Luna's F1 is **1.000** on the same scenario. Escalating everything preserves recall while losing precision. |
+| **Omitting or overstating the final report** | L4 Luna ships with no report; L5 Luna reaches deadline termination with no report. L5 Terra reports launch readiness while `task_8` remains incomplete and an `explicit_consent` violation remains. [L5 Luna trace](demo/dev-v15/l5_01040__gpt-5.6-luna.json.gz). | Missing reports deterministically score **0**. Terra's L5 report also scores **0**, from the judge's claim labels and omissions passed through the Python formula. This is a reporting metric, separate from delivery. The incomplete task is directly verifiable; other narrative judgments remain exploratory. |
+| **Late or absent corrective follow-through** | L5 Luna audits `ic_d` at step 28 / tick 11, seven ticks after its first material misreport. It never coaches any worker. | Detection is **1/3**, with latency **7 ticks for the detected worker only**. Coaching is **0** across three eligible workers because feedback is absent. This is missed retrospective feedback; coaching would not repair this episode's deliverables. |
+
+### A concrete score breakdown
+
+L2 Terra completes all six planned tasks, yet its normalized outcome is only **0.726**:
+
+```text
+Weighted completed quality                  4.215290
+− missing-requirement penalties              0.422395
+− late incident-assignment penalty           0.600000
+= raw outcome                               3.192895
+÷ same-scenario greedy-reference outcome     4.398955
+= normalized outcome                        0.725830
+```
+
+The two explicit penalties account for **0.232 normalized outcome points**. Holding delivered quality fixed and removing only those penalties gives 0.958; that is an accounting illustration, not a rerun proving that prevention would have been free. The remaining gap to the reference reflects differences in weighted delivered quality. This distinction prevents attributing every lost point to a single memorable mistake.
+
+### What the failures suggest testing next
+
+The traces motivate targeted policy changes: verify that assignments succeed, track incident deadlines separately from task completion, recover dependencies promptly, map discovered requirements to each task, audit new completion claims when warranted, and reserve a finalization step for reporting and coaching. Each change should be tested on fresh matched scenarios with its resource costs included.
+
+There are also evaluator limits. L4 has **zero eligible misleading workers** for both models, so detection `0/0` is not a detection failure. L5 Luna's deadline termination is a valid scored episode, not a harness error. All ten episodes have zero parse-forced waits; invalid scheduling actions are a different failure class. Finally, the narrative judge sometimes conflates a missing consent flag with bypassing review, or late incident handling with non-completion. Use the structured states and deadline rules for those distinctions rather than treating every judge explanation as established fact.
+
 ## Limitations and next steps
 
 - **External validity:** simulated worker behavior does not establish real-world management capability. Add document/repository workers and test whether the observed behaviors transfer.

@@ -1,5 +1,19 @@
 # Demo Snapshot: dev_v15
 
+**ExecBench differentiates the two models in this snapshot, with the largest outcome gaps at difficulties 4 and 5.** Terra scores higher at every level; its lead reaches 0.344 at difficulty 4 and 0.262 at difficulty 5, compared with 0.018 at difficulty 1.
+
+| Difficulty | gpt-5.6-luna outcome | gpt-5.6-terra outcome | Gap (Terra − Luna) |
+|---|---:|---:|---:|
+| 1 | 0.969 | 0.987 | +0.018 |
+| 2 | 0.554 | 0.726 | +0.172 |
+| 3 | 0.976 | 0.994 | +0.017 |
+| 4 | 0.568 | 0.912 | **+0.344** |
+| 5 | 0.480 | 0.742 | **+0.262** |
+
+Scores are normalized outcomes from [the saved episode scores](scores.jsonl), with higher values indicating better outcomes relative to the scenario's oracle reference. Values and gaps are independently rounded to three decimals.
+
+**Limited resources constrained the number of data points:** each difficulty level contains only one matched scenario and one episode per model (10 episodes total). These results are intended only for rough trend analysis; a larger sample with repeated runs is needed to establish a reliable statistical ranking.
+
 This saved run contains **10 completed episodes, zero failed attempts**: `gpt-5.6-luna` and `gpt-5.6-terra` each evaluated once on five matched scenarios, one per difficulty level. The policy models use the OpenAI endpoint, while the shared `GLM-5.3-Flash` grader uses Z.ai’s endpoint. Model identifiers are those recorded in the run; no new model calls were made to prepare this folder for sharing.
 
 Start with the trace viewer below (download and open locally), the [leaderboard](leaderboard.md), and the [failure analysis](../../README.md#failure-analysis-where-models-lose-credit).

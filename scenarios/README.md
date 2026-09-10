@@ -4,7 +4,7 @@
 |---|---|---|
 | [v1](v1) | 50 fixed-seed scenarios, seeds 1000–1049; ten at each of five difficulty levels | Full generated interview dataset |
 | [v1_dev](v1_dev) | Seeds 1000, 1010, 1020, 1030, 1040; byte-identical copies from v1 | Five-scenario development sweep used by [dev_v15](../results/dev_v15/README.md) |
-| [v0](v0) | Earlier 50-scenario generation | Provenance for historical baseline/live demos |
+| [v0](v0) | Earlier 50-scenario generation | Provenance for historical scenario generation |
 
 Each JSON file includes the public project setup, hidden simulator state, configuration, generation provenance, template-rendered memory, and the calibrated greedy-reference outcome. The evaluator loads the complete file but constructs restricted observations for the policy. These published development scenarios are not a hidden test set.
 

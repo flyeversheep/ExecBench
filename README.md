@@ -6,7 +6,7 @@
 
 The L0 implementation runs locally. The current interview snapshot is [dev_v15](results/dev_v15/README.md): **10/10 completed model episodes**, comparing the recorded policies `gpt-5.6-luna` and `gpt-5.6-terra` on five matched scenarios, one per difficulty level. Review the [comparison viewer](results/dev_v15/luna_vs_terra.html), [leaderboard](results/dev_v15/leaderboard.md), and [failure analysis](README_INTERVIEW.md#failure-analysis-where-models-lose-credit). Download HTML files and open them locally; no API key is needed to inspect saved results.
 
-The repository also includes the [full v1 scenario set](scenarios/v1) (50 scenarios), its [five-scenario development subset](scenarios/v1_dev), five scripted policies, and historical baseline/live evidence. The older [September 5 resumed live report](demo/live-resumed/REPORT.md) records 208/350 completed episodes before API balance depletion. That incomplete run and the complete v15 development run are separate evaluations; neither is a complete model comparison over all 50 v1 scenarios.
+The repository also includes the [full v1 scenario set](scenarios/v1) (50 scenarios), its [five-scenario development subset](scenarios/v1_dev), and five scripted policies. The v15 development run covers five scenarios, not a complete model comparison over all 50 v1 scenarios.
 
 ## Run locally
 
@@ -28,14 +28,6 @@ uv run execbench run-benchmark --scenario-set scenarios/v1_dev \
   --policies oracle,heuristic,trust_all,audit_all,random \
   --grader-model none --out results/offline-v1-dev
 ```
-
-The following legacy utility rebuilds the baseline demo against `scenarios/v0` and overwrites the historical files in `demo/`:
-
-```sh
-uv run python scripts/make_demo.py
-```
-
-This writes full traces under a directory named for the implementation hash in `results/`, and copies summary results and three selected traces to `demo/`. No API access is needed. Run from the repository root.
 
 ## Live LLM evaluation
 
@@ -65,7 +57,7 @@ uv run execbench leaderboard results/live-v1-dev-new
 
 Model access depends on the credential's entitlement. These model names and the general API endpoint are documented by [Z.ai](https://docs.z.ai/api-reference/llm/chat-completion). A coding-plan credential may require a different configured base URL. Three Z.ai models are a within-provider comparison, not evidence about multiple model vendors.
 
-`scripts/run_live_demo.py` is the legacy v0 demo runner: it performs API preflights and grader acceptance checks before evaluating its configured scenario set. For the v1 interview scenarios, use the CLI commands above. Failed episodes are recorded and retried on resume; successful episodes are retained. An empty API balance stops queued work. Resume only with the original manifest-compatible code, scenarios, and settings. Use a new output directory after changes; do not resume the historical `live-demo` or `live-demo-resumed` directories with today's implementation. Cached calls are reused only when their request keys match.
+Failed episodes are recorded and retried on resume; successful episodes are retained. An empty API balance stops queued work. Resume only with the original manifest-compatible code, scenarios, and settings. Use a new output directory after changes. Cached calls are reused only when their request keys match.
 
 | Setting | Purpose |
 |---|---|
@@ -108,7 +100,7 @@ uv run execbench generate --out scenarios/generated-review --count 50 --seed 100
 uv run execbench generate --out scenarios/llm-memory --count 50 --seed 1000 --memory-model glm-4.7
 ```
 
-The checked-in `scenarios/v1_dev` files are byte-identical selections from `scenarios/v1`: seeds 1000, 1010, 1020, 1030, and 1040. They match the scenario hashes and embedded scenarios in `results/dev_v15`. The folder name `v1` identifies this generated dataset, not a package release: the package and trace schema still use version `0.1.0`. The older `scenarios/v0` is retained for historical demo provenance. Generate into a new directory to preserve these snapshots.
+The checked-in `scenarios/v1_dev` files are byte-identical selections from `scenarios/v1`: seeds 1000, 1010, 1020, 1030, and 1040. They match the scenario hashes and embedded scenarios in `results/dev_v15`. The folder name `v1` identifies this generated dataset, not a package release: the package and trace schema still use version `0.1.0`. The older `scenarios/v0` is retained for historical scenario provenance. Generate into a new directory to preserve these snapshots.
 
 Six YAML templates cover rate limiting, recommendations, logging migration, data export, onboarding, and billing. Seeds 1000–1049 span five difficulty levels, ten per level. Generation runs the privileged reference once to estimate usage/deadline and again under the calibrated budget to record its outcome. Every scenario includes simulator constants, generation provenance, hidden memory events, and rendered memory.
 
@@ -164,21 +156,11 @@ No composite score is produced.
 
 Grading defaults to `glm-4.7-flash`; pass `--grader-model none` (or set `EXECBENCH_GRADER_MODEL=none`) to run without a judge. With no grader model, nonempty reports and feedback requiring judgments are explicitly ungraded. Empty reports and missing coaching can be scored zero without an LLM. The leaderboard marks partial metric coverage as `[graded/episodes]`; JSON includes every metric's sample count. Baseline zeros do not imply that live grader acceptance has passed.
 
-## Findings from the bundled baseline run
-
-These are historical results for the supplied v0 seeds, not claims about frontier models or causal effects of memory.
-
-1. **Management errors are observable without executing real work.** In [the stale-trust trace, day 5](demo/stale-trust.html#step-9), Alex's proxy metric reaches 1.0 while completed work has quality about 0.17. TrustAll never audits Alex. The hidden truth and public worker updates appear side by side; the viewer also marks the missed stakeholder escalation.
-2. **Verification has a resource tradeoff.** Across 50 scenarios, AuditAll uses about 99.3% of compute and achieves normalized outcome 0.372; the heuristic reaches 0.563, while TrustAll reaches 0.546 using about 60.2% of compute. In [the same-scenario audit trace](demo/audit-cost.html), audits alone consume about 63.3% of the budget. [The heuristic trace](demo/verification.html) detects the misleading worker but also nearly exhausts compute. These are policy profiles, not a universal ranking.
-3. **A stale-trust failure is reproducible.** The [briefing](demo/stale-trust.html#step-0) says Alex received feedback 120 days earlier and improved at the time. His current gaming penalty has mostly returned. TrustAll's stale-trust score is 1.0 on this case; the heuristic audits Alex and scores 0.0. Recent adverse notes are also present, so this case demonstrates an ignored warning rather than proving that stale feedback caused the behavior.
-
-Full per-difficulty results: [Markdown](demo/leaderboard.md), [JSON](demo/leaderboard.json), [episode scores](demo/scores.jsonl). The selected traces retain the complete structured scenario and grading evidence.
-
 ## Verification and remaining acceptance
 
 The offline suite covers formulas, all six personas, dependencies, budgets, incident deadlines, default resolutions, drift, feedback, observation isolation, deterministic regeneration, escalation and detection, grading formulas, memory fallback, provider contracts, credential redaction, parse retries, resumable runs, and HTML escaping. Twenty seeded hand-authored scenarios satisfy oracle ≥ heuristic ≥ TrustAll; this is not asserted for every generated scenario.
 
-Run `uv run pytest -q` and `uv run ruff check execbench tests scripts`. The viewer has also been inspected in a browser. `scripts/validate_live_graders.py` contains five report and five feedback acceptance examples. The saved September 5 acceptance evidence records five passing checks, including honesty ordering and feedback ordering; it does not validate every subsequent grader/model configuration. The 76 completed live model episodes had zero parse-failure forced waits across 2,652 actions. Actual narrative grading has [documented limitations](demo/live-resumed/GRADING_NOTES.md), despite passing the synthetic checks. The older three-model run remains incomplete. The separately saved v15 run completed all ten planned episodes, including difficulty 5, but does not cover the full 50-scenario set. On September 9, 2026, the current offline suite passed all **95 tests**, and Ruff passed (Python 3.13.15, frozen dependencies).
+Run `uv run pytest -q` and `uv run ruff check execbench tests scripts`. The viewer has also been inspected in a browser. `scripts/validate_live_graders.py` contains five report and five feedback acceptance examples. Narrative grading still requires human-rater validation. The separately saved v15 run completed all ten planned episodes, including difficulty 5, but does not cover the full 50-scenario set. On September 9, 2026, the current offline suite passed all **95 tests**, and Ruff passed (Python 3.13.15, frozen dependencies).
 
 L1 document workers, L2 repository workers, persona adaptation to episode feedback, cross-episode learning, and human-rater validation remain outside v0.1.
 

@@ -25,9 +25,9 @@ Open the resulting HTML locally. Reading and rendering saved traces requires no 
 
 - [Full scenario set](../../scenarios/v1): 50 generated scenarios, ten per difficulty level. [Development subset](../../scenarios/v1_dev): five byte-identical selections, seeds 1000, 1010, 1020, 1030, and 1040.
 - [Manifest](manifest.json): original implementation SHA-256, exact scenario hashes, 60,000-character history setting, provider configuration, and `GLM-5.3-Flash` grader. On September 9, 2026, the implementation hash matched the checked-in package, all five scenario hashes matched `v1_dev`, and each trace embedded the corresponding scenario exactly.
-- [Run status](run_status.json), [episode scores](scores.jsonl), and [JSON leaderboard](leaderboard.json) preserve the original run's accounting. The six examples in [demo/dev-v15](../../demo/dev-v15/README.md) are unchanged copies from this run, not extra episodes.
+- [Run status](run_status.json), [episode scores](scores.jsonl), and [JSON leaderboard](leaderboard.json) preserve the original run's accounting.
 - Outcome means are 0.872 for Terra and 0.710 for Luna; mean simulated compute use is 72.9% and 59.9%, respectively. These are descriptive single-run results, not a pass rate, causal estimate, or statistical model ranking. Dollar costs are unavailable because pricing was not configured.
 - Report honesty and coaching use saved model judgments. Deterministic outcome accounting and hidden states should be inspected separately from those judgments. Full traces expose evaluator ground truth for review; ordinary policy observations do not contain it.
-- `dev_v15` is a run label and `v1` a scenario-set label; the package and trace schema remain version `0.1.0`. Earlier `demo/live*` results belong to different runs and configurations.
+- `dev_v15` is a run label and `v1` a scenario-set label; the package and trace schema remain version `0.1.0`.
 
 Keep this folder as a frozen review snapshot. Run new experiments into a different output directory. Raw response-cache files and credentials are not part of this submission; the trajectories preserve executed actions and recorded evidence, but a fresh live run is not guaranteed to reproduce the same responses.

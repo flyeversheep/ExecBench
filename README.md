@@ -8,9 +8,8 @@ This is a portfolio walkthrough of the problem framing, implementation choices, 
 
 ## Start here: a five-minute review
 
-1. Open the [v15 comparison viewer](results/dev_v15/luna_vs_terra.html) to compare the two models across five matched scenarios. Download and open the HTML locally; it works offline.
-2. Read the [v15 run metadata and trajectories](results/dev_v15/README.md) and [failure analysis](#failure-analysis-where-models-lose-credit).
-3. Inspect [the action and data contracts](execbench/schemas.py), [observation construction](execbench/env/observations.py), and [regression tests](tests/test_environment.py).
+1. Read the [v15 run metadata and trajectories](results/dev_v15/README.md) and [failure analysis](#failure-analysis-where-models-lose-credit) for a rollout run with latest dev set comparing two GPT models (details below).
+2. Inspect [the action and data contracts](execbench/schemas.py), [observation construction](execbench/env/observations.py), and [regression tests](tests/test_environment.py).
 
 The repository includes the [50-scenario v1 set](scenarios/v1), its [five-scenario development subset](scenarios/v1_dev), and [all ten v15 model trajectories](results/dev_v15/README.md), alongside five scripted policies. The policies are `gpt-5.6-luna` and `gpt-5.6-terra` through OpenAI; the shared grader is Z.ai’s `GLM-5.3-Flash`. The v15 manifest matches the current implementation and supplied development scenarios.
 

@@ -2,6 +2,8 @@
 
 This directory preserves six selected trajectories and summary metadata from the local `results/dev_v15` run to support the [interviewer README](../../README_INTERVIEW.md#failure-analysis-where-models-lose-credit). Files were copied unchanged on September 9, 2026; no models or graders were rerun.
 
+The [complete ten-trajectory run](../../results/dev_v15/README.md) and [source scenarios](../../scenarios/README.md) are now included in the repository. This directory retains the original six-example bundle; its files do not represent additional episodes.
+
 The full run has ten completed episodes and zero failed attempts: five scenarios, one episode per policy per scenario. The [leaderboard](leaderboard.md) and [score records](scores.jsonl) cover all ten; only the six traces cited in the analysis are included here. The [manifest](manifest.json) records the original implementation hash, scenario hashes, and `GLM-5.3-Flash` grader. [Run status](run_status.json) records completion. Dollar costs are unknown, not zero.
 
 | Scenario | Luna | Terra |

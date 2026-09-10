@@ -1,0 +1,22 @@
+{
+  "implementation_sha256": "b04f2b42f5a3e7bb42530ca1cde5d11b205a844a87acc48d7e494bd65b611fda",
+  "history_chars": 60000,
+  "provider": "openai",
+  "base_url": "https://api.openai.com/v1",
+  "grader_provider": "openai",
+  "grader_base_url": "https://api.z.ai/api/paas/v4",
+  "pricing": {},
+  "version": "0.1.0",
+  "policies": [
+    "gpt-5.6-terra",
+    "gpt-5.6-luna"
+  ],
+  "grader_model": "GLM-5.3-Flash",
+  "scenarios": {
+    "l1_01000.json": "126e3577e9ffd95644d143bd765496bda8742d52a1d6980d387e3f1a82829a7c",
+    "l2_01010.json": "f01adb257ca7e37f61c0b3a4aa8e482c27cf961d01ec092dd4b685aa05262fa6",
+    "l3_01020.json": "7863913f3a891606d96945295d4b4932c7b62b5e2924f35feeff77a9395cb64e",
+    "l4_01030.json": "0950d7937d78c685af70975cb80c1919fca988e7800c8f58b004ac5a8b6aa219",
+    "l5_01040.json": "fbf4fcfeb29e5a5ef8954221a9809e53546b3d97a7fa750894425f8fba95ebca"
+  }
+}

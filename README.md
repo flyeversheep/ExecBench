@@ -4,23 +4,32 @@
 
 **An evaluation environment for AI executive agents.** The model manages a project through simulated workers; it never implements the deliverables. Hidden worker behavior, stakeholder constraints, incidents, and priority changes provide structured ground truth for management decisions.
 
-The L0 implementation runs locally. The repository includes **50 fixed-seed scenarios, five scripted policies, 250 baseline results, and three standalone trace viewers**. Live API access now works and all live grader acceptance checks passed. The [resumed live run report](demo/live-resumed/REPORT.md) records **76 model episodes and 132 live-graded baseline episodes** completed before Z.ai again reported insufficient balance (code 1113). The run is stopped at 208/350 episodes. Matched-scenario comparisons and cumulative API cost estimates are available; full 50-scenario coverage remains pending.
+The L0 implementation runs locally. The current interview snapshot is [dev_v15](results/dev_v15/README.md): **10/10 completed model episodes**, comparing the recorded policies `gpt-5.6-luna` and `gpt-5.6-terra` on five matched scenarios, one per difficulty level. Review the [comparison viewer](results/dev_v15/luna_vs_terra.html), [leaderboard](results/dev_v15/leaderboard.md), and [failure analysis](README_INTERVIEW.md#failure-analysis-where-models-lose-credit). Download HTML files and open them locally; no API key is needed to inspect saved results.
 
-Start with [the stale-trust trace](demo/stale-trust.html), [the verification trace](demo/verification.html), and [the leaderboard](demo/leaderboard.md). HTML files work offline; download/open them locally if your Git host displays their source.
+The repository also includes the [full v1 scenario set](scenarios/v1) (50 scenarios), its [five-scenario development subset](scenarios/v1_dev), five scripted policies, and historical baseline/live evidence. The older [September 5 resumed live report](demo/live-resumed/REPORT.md) records 208/350 completed episodes before API balance depletion. That incomplete run and the complete v15 development run are separate evaluations; neither is a complete model comparison over all 50 v1 scenarios.
 
 ## Run locally
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-uv sync --extra dev --python 3.12
+uv sync --frozen --extra dev --python 3.12
 uv run pytest -q
 uv run execbench --help
-uv run execbench run-episode --scenario scenarios/v0/l2_01010.json --policy heuristic --out traces
+uv run execbench run-episode --scenario scenarios/v1_dev/l2_01010.json \
+  --policy heuristic --grader-model none --out traces
 uv run execbench view traces/l2_01010__heuristic.json.gz --out trace.html
 ```
 
-Rebuild the complete baseline demo:
+The quickstart explicitly disables the API grader. Nonempty narrative reports remain ungraded and the online question-readability check is skipped. For a five-policy offline run on the supplied development scenarios:
+
+```sh
+uv run execbench run-benchmark --scenario-set scenarios/v1_dev \
+  --policies oracle,heuristic,trust_all,audit_all,random \
+  --grader-model none --out results/offline-v1-dev
+```
+
+The following legacy utility rebuilds the baseline demo against `scenarios/v0` and overwrites the historical files in `demo/`:
 
 ```sh
 uv run python scripts/make_demo.py
@@ -46,17 +55,17 @@ Either one is enough; pick whichever fits your setup. If both are set, the direc
 export EXECBENCH_BASE_URL='https://api.z.ai/api/paas/v4'
 uv run execbench check-api --model glm-4.7
 uv run python scripts/validate_live_graders.py --model glm-4.7
-uv run execbench run-episode --scenario scenarios/v0/l2_01010.json \
+uv run execbench run-episode --scenario scenarios/v1_dev/l2_01010.json \
   --policy glm-4.7 --grader-model glm-4.7 --out traces
-uv run execbench run-benchmark --scenario-set scenarios/v0 \
+uv run execbench run-benchmark --scenario-set scenarios/v1_dev \
   --policies oracle,heuristic,trust_all,audit_all,glm-5.1,glm-5,glm-4.7 \
-  --grader-model glm-4.7 --workers 6 --out results/live-demo-resumed
-uv run execbench leaderboard results/live-demo
+  --grader-model glm-4.7 --workers 6 --out results/live-v1-dev-new
+uv run execbench leaderboard results/live-v1-dev-new
 ```
 
 Model access depends on the credential's entitlement. These model names and the general API endpoint are documented by [Z.ai](https://docs.z.ai/api-reference/llm/chat-completion). A coding-plan credential may require a different configured base URL. Three Z.ai models are a within-provider comparison, not evidence about multiple model vendors.
 
-Alternatively, `scripts/run_live_demo.py` performs API preflights, validates the frozen grader, and runs the model/baseline benchmark. Failed episodes are recorded and retried when the same command is resumed; successful episodes are retained. An empty API balance stops queued work. For this checkout, use `--out results/live-demo-resumed`: the original run remains in `results/live-demo` with its original implementation manifest, and cached calls will be reused by the updated client. Calls already in the cache are replayed without a new request.
+`scripts/run_live_demo.py` is the legacy v0 demo runner: it performs API preflights and grader acceptance checks before evaluating its configured scenario set. For the v1 interview scenarios, use the CLI commands above. Failed episodes are recorded and retried on resume; successful episodes are retained. An empty API balance stops queued work. Resume only with the original manifest-compatible code, scenarios, and settings. Use a new output directory after changes; do not resume the historical `live-demo` or `live-demo-resumed` directories with today's implementation. Cached calls are reused only when their request keys match.
 
 | Setting | Purpose |
 |---|---|
@@ -94,10 +103,12 @@ Token usage is always recorded. Dollar values are **estimates** based on explici
 ## Scenarios and reproducibility
 
 ```sh
-uv run execbench generate --out scenarios/v0 --count 50 --seed 1000 --config configs/default.yaml
+uv run execbench generate --out scenarios/generated-review --count 50 --seed 1000 --config configs/default.yaml
 # Optional natural-language memory rendering, with a second model validation and three-attempt fallback:
 uv run execbench generate --out scenarios/llm-memory --count 50 --seed 1000 --memory-model glm-4.7
 ```
+
+The checked-in `scenarios/v1_dev` files are byte-identical selections from `scenarios/v1`: seeds 1000, 1010, 1020, 1030, and 1040. They match the scenario hashes and embedded scenarios in `results/dev_v15`. The folder name `v1` identifies this generated dataset, not a package release: the package and trace schema still use version `0.1.0`. The older `scenarios/v0` is retained for historical demo provenance. Generate into a new directory to preserve these snapshots.
 
 Six YAML templates cover rate limiting, recommendations, logging migration, data export, onboarding, and billing. Seeds 1000–1049 span five difficulty levels, ten per level. Generation runs the privileged reference once to estimate usage/deadline and again under the calibrated budget to record its outcome. Every scenario includes simulator constants, generation provenance, hidden memory events, and rendered memory.
 
@@ -148,13 +159,14 @@ No composite score is produced.
 | Coaching quality / false positives | Fixed LLM checks feedback against actual prior incidents; missed coaching scores zero |
 | Prior utilization | Early audits within three ticks of first assignment for issue-memory ICs, compared with no-memory ICs |
 | Stale trust | Never-audited ICs with decayed feedback at least 60 days old |
+| Specification precision | Applicable flags / all flags across accepted assignments; undefined with no flags, and separate from requirement coverage |
 | Efficiency | Compute, patience, ticks, action counts, token usage, configured cost estimates, and forced parse-failure waits |
 
 Grading defaults to `glm-4.7-flash`; pass `--grader-model none` (or set `EXECBENCH_GRADER_MODEL=none`) to run without a judge. With no grader model, nonempty reports and feedback requiring judgments are explicitly ungraded. Empty reports and missing coaching can be scored zero without an LLM. The leaderboard marks partial metric coverage as `[graded/episodes]`; JSON includes every metric's sample count. Baseline zeros do not imply that live grader acceptance has passed.
 
 ## Findings from the bundled baseline run
 
-These are descriptive results for the supplied seeds, not claims about frontier models or causal effects of memory.
+These are historical results for the supplied v0 seeds, not claims about frontier models or causal effects of memory.
 
 1. **Management errors are observable without executing real work.** In [the stale-trust trace, day 5](demo/stale-trust.html#step-9), Alex's proxy metric reaches 1.0 while completed work has quality about 0.17. TrustAll never audits Alex. The hidden truth and public worker updates appear side by side; the viewer also marks the missed stakeholder escalation.
 2. **Verification has a resource tradeoff.** Across 50 scenarios, AuditAll uses about 99.3% of compute and achieves normalized outcome 0.372; the heuristic reaches 0.563, while TrustAll reaches 0.546 using about 60.2% of compute. In [the same-scenario audit trace](demo/audit-cost.html), audits alone consume about 63.3% of the budget. [The heuristic trace](demo/verification.html) detects the misleading worker but also nearly exhausts compute. These are policy profiles, not a universal ranking.
@@ -166,7 +178,7 @@ Full per-difficulty results: [Markdown](demo/leaderboard.md), [JSON](demo/leader
 
 The offline suite covers formulas, all six personas, dependencies, budgets, incident deadlines, default resolutions, drift, feedback, observation isolation, deterministic regeneration, escalation and detection, grading formulas, memory fallback, provider contracts, credential redaction, parse retries, resumable runs, and HTML escaping. Twenty seeded hand-authored scenarios satisfy oracle ≥ heuristic ≥ TrustAll; this is not asserted for every generated scenario.
 
-Run `uv run pytest -q` and `uv run ruff check execbench tests scripts`. The viewer has also been inspected in a browser. `scripts/validate_live_graders.py` contains five report and five feedback acceptance examples. All five live grader acceptance checks passed, including honesty ordering and feedback ordering. The 76 completed live model episodes had zero parse-failure forced waits across 2,652 actions. Actual narrative grading has [documented limitations](demo/live-resumed/GRADING_NOTES.md), despite passing the synthetic checks. Full model completion across 50 scenarios and the complete 3-model leaderboard remain pending API credit. The latest offline suite has 40 passing tests, including non-retryable balance-error handling.
+Run `uv run pytest -q` and `uv run ruff check execbench tests scripts`. The viewer has also been inspected in a browser. `scripts/validate_live_graders.py` contains five report and five feedback acceptance examples. The saved September 5 acceptance evidence records five passing checks, including honesty ordering and feedback ordering; it does not validate every subsequent grader/model configuration. The 76 completed live model episodes had zero parse-failure forced waits across 2,652 actions. Actual narrative grading has [documented limitations](demo/live-resumed/GRADING_NOTES.md), despite passing the synthetic checks. The older three-model run remains incomplete. The separately saved v15 run completed all ten planned episodes, including difficulty 5, but does not cover the full 50-scenario set. On September 9, 2026, the current offline suite passed all **95 tests**, and Ruff passed (Python 3.13.15, frozen dependencies).
 
 L1 document workers, L2 repository workers, persona adaptation to episode feedback, cross-episode learning, and human-rater validation remain outside v0.1.
 

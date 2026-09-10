@@ -10,10 +10,10 @@ This is a portfolio walkthrough of the problem framing, implementation choices, 
 
 1. Open the [stale-trust trace](demo/stale-trust.html): compare Alex's reported progress with the hidden outcome. Download and open the HTML locally; it works offline.
 2. Compare the [heuristic verification trace](demo/verification.html) and [audit-cost trace](demo/audit-cost.html) for the same scenario. Detecting a problem and delivering a good outcome are different achievements.
-3. Read the [baseline leaderboard](demo/leaderboard.md), then the [partial live-run report](demo/live-resumed/REPORT.md) for coverage, matched comparisons, and failure accounting.
+3. Read the [v15 comparison](results/dev_v15/README.md) and [failure analysis](#failure-analysis-where-models-lose-credit). The [baseline leaderboard](demo/leaderboard.md) and [partial live-run report](demo/live-resumed/REPORT.md) provide historical context.
 4. Inspect [the action and data contracts](execbench/schemas.py), [observation construction](execbench/env/observations.py), and [regression tests](tests/test_environment.py).
 
-The repository includes 50 fixed-seed scenarios, five scripted policies, 250 historical baseline results, and selected interactive traces. Bundled results are historical snapshots; later changes to action costs, prompts, and question handling require fresh evaluation.
+The repository includes the [50-scenario v1 set](scenarios/v1), its [five-scenario development subset](scenarios/v1_dev), and [all ten v15 model trajectories](results/dev_v15/README.md), alongside five scripted policies and 250 historical v0 baseline results. The v15 manifest matches the current implementation and supplied development scenarios; older demo results predate later changes to costs, prompts, and question handling.
 
 ## Problem framing and scope
 
@@ -108,7 +108,9 @@ Verified on September 7, 2026 against code commit `a375ba9`, using Python 3.13.1
 
 CI configuration is in [test.yml](.github/workflows/test.yml) and uses Python 3.12. Offline tests use controlled provider responses; they do not establish that a live model or judge behaves correctly. No new live API evaluation was run for this documentation update.
 
-Historical live evidence is more limited: the [September 5 report](demo/live-resumed/REPORT.md) records 208/350 completed episodes, including 76 executive-model episodes, before API balance depletion. Its 15-scenario matched comparison reports normalized outcome of 0.894 for GLM-5, 0.816 for GLM-5.1, and 0.793 for GLM-4.7. These are descriptive results from an incomplete, within-provider run, not a current model ranking or a result reproduced by this documentation update.
+The current [v15 development snapshot](results/dev_v15/README.md) is complete at 10/10 episodes across five matched scenarios, including difficulty 5. Its manifest and embedded scenarios were checked against the supplied code and scenario files on September 9, 2026. The 95-test suite and lint checks also passed again on that date.
+
+The older live evaluation is incomplete: the [September 5 report](demo/live-resumed/REPORT.md) records 208/350 completed episodes, including 76 executive-model episodes, before API balance depletion. Its 15-scenario matched comparison reports normalized outcome of 0.894 for GLM-5, 0.816 for GLM-5.1, and 0.793 for GLM-4.7. These are descriptive results from an incomplete, within-provider run, not a current model ranking or a result reproduced by this documentation update.
 
 ## Failure analysis: where models lose credit
 

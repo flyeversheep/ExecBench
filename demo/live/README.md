@@ -1,5 +1,7 @@
 # Partial live run — blocked by API balance
 
+Historical September 5, 2026 snapshot, superseded in coverage by the [resumed report](../live-resumed/REPORT.md). The [v15 interview run](../../results/dev_v15/README.md) is a separate, complete development sweep. API availability and pricing statements below describe the historical run, not current account status.
+
 The credential succeeded on 2026-09-05. API preflights passed for GLM-5.1, GLM-5, and GLM-4.7, and **all five live grader acceptance checks passed**. The benchmark stopped when the general Z.ai API returned HTTP 429 with provider error **1113: insufficient balance or no resource package**.
 
 | Policy | Completed scenarios / planned |
@@ -20,13 +22,13 @@ Prices were checked against [Z.ai’s official pricing](https://docs.z.ai/guides
 
 The live run exposed and fixed two integration issues: the grader sometimes emits an out-of-range arithmetic summary despite valid claim judgments (the benchmark now accepts that informational field and still computes its own bounded score), and Z.ai uses HTTP 429 for an empty balance (the runner now detects code 1113 and cancels queued work).
 
-After adding API credit, resume from the repository root:
+The commands below are a historical workflow example. Today's implementation is incompatible with the saved run manifest; use a new output directory for a new run. A true resume requires the original code, settings, and local cache. For a new legacy v0 demo run:
 
 ```sh
 export EXECBENCH_API_KEY='your-api-key'   # or EXECBENCH_API_KEY_REF='op://AI agents/Z.ai API/credential'
 export EXECBENCH_PRICES_JSON='{"glm-5.1":{"input":1.4,"output":4.4},"glm-5":{"input":1.0,"output":3.2},"glm-4.7":{"input":0.6,"output":2.2}}'
-uv run python scripts/run_live_demo.py --workers 6 --out results/live-demo-resumed
-uv run python scripts/summarize_live.py --results results/live-demo-resumed --out demo/live-complete
+uv run python scripts/run_live_demo.py --workers 6 --out results/live-demo-new
+uv run python scripts/summarize_live.py --results results/live-demo-new --out demo/live-new
 ```
 
-The new result directory preserves the original run’s manifest while allowing the balance-handling implementation fix. Prior model responses are replayed from the same cache. The benchmark will not silently mix implementation hashes.
+A new result directory preserves the original run's files. Prior responses are reused only if the original local cache is available and request keys match. The benchmark will not silently mix implementation hashes.

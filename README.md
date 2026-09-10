@@ -122,7 +122,4 @@ There are also evaluator limits. L4 has **zero eligible misleading workers** for
 - **External validity:** simulated worker behavior does not establish real-world management capability. Add document/repository workers and test whether the observed behaviors transfer.
 - **Judge validity:** narrative judgments require validation against structured evidence and human ratings. Enrich and deduplicate evidence, then validate a new rubric with human raters.
 - **Coverage and uncertainty:** the saved development run covers only five matched scenarios, with one episode per model at each difficulty level. Complete matched coverage, repeat trials, and report uncertainty before making ranking claims.
-- **Version drift:** supplied scenarios and traces predate subsequent semantic changes. Regenerate oracle references and rerun all compared policies under the same manifest.
 - **Learning and cost control:** no cross-episode learning or within-episode coaching adaptation is implemented. Add explicit API spending caps before expanding live runs.
-
-The strongest evidence of engineering judgment here is the combination of a runnable system, explicit contracts, inspectable failures, and bounded claims. An interviewer can challenge a design choice, inspect its implementation, and run the corresponding regression test.

@@ -1,173 +1,157 @@
-# ExecBench
+# ExecBench — Evaluating the decisions behind delegated work
 
-**Reviewing this project for an interview?** Start with the [interviewer walkthrough](README_INTERVIEW.md) for the problem framing, design decisions, tool use, testing, and limitations.
+**Can an AI agent deliver a project when worker updates are unreliable, requirements are incomplete, and verification consumes the same budget as execution?**
 
-**An evaluation environment for AI executive agents.** The model manages a project through simulated workers; it never implements the deliverables. Hidden worker behavior, stakeholder constraints, incidents, and priority changes provide structured ground truth for management decisions.
+ExecBench turns that question into a runnable evaluation environment. An executive agent delegates to simulated workers, asks stakeholders for requirements, audits progress, handles incidents, and decides when to ship. The simulator retains hidden ground truth, so a convincing status report can be compared with what actually happened.
 
-The L0 implementation runs locally. The current interview snapshot is [dev_v15](results/dev_v15/README.md): **10/10 completed model episodes**, comparing the recorded policies `gpt-5.6-luna` and `gpt-5.6-terra` on five matched scenarios, one per difficulty level. Review the [comparison viewer](results/dev_v15/luna_vs_terra.html), [leaderboard](results/dev_v15/leaderboard.md), and [failure analysis](README_INTERVIEW.md#failure-analysis-where-models-lose-credit). Download HTML files and open them locally; no API key is needed to inspect saved results.
+This is a portfolio walkthrough of the problem framing, implementation choices, tools, validation, and limits. For the full interface and configuration reference, see the [technical README](README_TECHNICAL.md).
 
-The repository also includes the [full v1 scenario set](scenarios/v1) (50 scenarios), its [five-scenario development subset](scenarios/v1_dev), and five scripted policies. The v15 development run covers five scenarios, not a complete model comparison over all 50 v1 scenarios.
+## Start here: a five-minute review
 
-## Run locally
+1. Open the [v15 comparison viewer](results/dev_v15/luna_vs_terra.html) to compare the two models across five matched scenarios. Download and open the HTML locally; it works offline.
+2. Read the [v15 run metadata and trajectories](results/dev_v15/README.md) and [failure analysis](#failure-analysis-where-models-lose-credit).
+3. Inspect [the action and data contracts](execbench/schemas.py), [observation construction](execbench/env/observations.py), and [regression tests](tests/test_environment.py).
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+The repository includes the [50-scenario v1 set](scenarios/v1), its [five-scenario development subset](scenarios/v1_dev), and [all ten v15 model trajectories](results/dev_v15/README.md), alongside five scripted policies. The policies are `gpt-5.6-luna` and `gpt-5.6-terra` through OpenAI; the shared grader is Z.ai’s `GLM-5.3-Flash`. The v15 manifest matches the current implementation and supplied development scenarios.
+
+## Problem framing and scope
+
+The unit of evaluation is a **management decision under partial information**. A worker may claim completion early, optimize a proxy metric, or appear reliable because of outdated feedback. An executive must decide what to ask, whom to trust, when to verify, and whether intervention is worth its cost.
+
+The first implementation deliberately uses simulated work. This makes progress, quality, hidden requirements, and misleading reports observable to the evaluator while keeping them hidden from the agent. It also allows inexpensive, repeatable experiments before introducing real document or repository workers.
+
+Success is measured across outcome, escalation, detection, verification, reporting, coaching, memory use, and efficiency. There is no composite score: a single number would hide tradeoffs such as more detection at the expense of delivery. The simulator's compute budget and actual API token/spend accounting are separate quantities.
+
+## Design decisions and tradeoffs
+
+| Decision | Why it matters | Cost or limitation |
+|---|---|---|
+| Separate public observations from hidden simulator state | Agents must discover relevant facts rather than read the answers. Public fields are explicitly copied, with leakage regression tests. | Published scenarios expose the simulator to anyone developing against it; this is not a secret test set. |
+| Seeded, named random streams | Extra status or audit calls cannot perturb the underlying work draws and accidentally change the comparison. | Live model responses need the response cache for exact replay. |
+| One validated action per model turn | Malformed or multiple tool calls execute nothing; retries do not advance simulated time. Repeated failures eventually force a wait. | Interface and retry behavior are part of the benchmark and must be versioned. |
+| Deterministic metrics plus model-assisted narrative grading | Python calculates outcomes and formulas; a judge extracts report claims and evaluates coaching against evidence. | Narrative judgment remains imperfect and requires separate validation. |
+| Several baselines and a privileged greedy oracle | TrustAll, AuditAll, Heuristic, Random, and Oracle make different failure modes inspectable. | The oracle is an empirical reference, not an upper bound; normalized outcomes can exceed 1. |
+| Hashed resume manifests and cached API responses | Interrupted runs retain successful episodes and reject incompatible configurations. | A changed implementation requires a new output directory; replay is not an independent sample. |
+| Full traces and standalone HTML viewers | A reviewer can follow observation → action → consequence → score evidence. | Full traces contain hidden truth and belong to evaluation, not the agent's input. |
+
+The [project plan](execbench_project_plan.md) records the broader design. The [technical README](README_TECHNICAL.md) documents concrete resolutions of ambiguous semantics, including dependency timing, blocked-worker costs, and strict incident deadlines.
+
+## Architecture and tool use
+
+```text
+Seed + YAML templates → Scenario with hidden truth
+                              ↓
+                    ExecEnv → Public observation
+                       ↑             ↓
+                 Validated action ← Scripted or LLM policy
+                       ↓
+                Episode trace → Graders → Scorecard + HTML viewer
+```
+
+| Tool or component | Concrete role |
+|---|---|
+| Python, Pydantic, Typer | Typed scenario/action/trace contracts and a CLI for generation, episodes, benchmarks, and viewing. |
+| NumPy and YAML | Controlled randomness and six configurable project templates spanning five difficulty levels. |
+| HTTPX provider adapters | OpenAI-compatible and Anthropic tool-call handling, response caching, usage accounting, and redacted errors without provider SDK dependencies. |
+| Environment credentials / optional 1Password CLI | Runtime credential loading; credentials are excluded from traces and response-cache records. |
+| Pytest, Ruff, uv, GitHub Actions | Regression checks, linting, locked dependencies, and automated checks on pushes and pull requests. |
+| Jinja2 and standalone HTML | Inspectable traces with escaped rendered content and no hosted service required. |
+
+The agent's tools include stakeholder questions, assignments, audits, reassignment, escalation, coaching, reporting, and shipping. Each has explicit semantics: for example, `coach_ic` evaluates retrospective feedback but does not repair work or adapt workers during the episode.
+
+For this documentation update, Codex assisted with source inspection, drafting, and running the checks reported below. The descriptions of the implementation are grounded in repository evidence; this walkthrough does not reconstruct the original development prompts or attribute every implementation decision to a particular tool.
+
+## Execution: changes that make the benchmark more credible
+
+The commit history and tests show concrete iteration on the evaluation contract:
+
+- **Constrain information gathering.** Human questions are scoped to a task, cost patience by word count, and, with a configured judge, must pass a readability check before revealing information. Offline runs explicitly leave that check unchecked.
+- **Price over-specification.** Distinct assignment flags consume compute regardless of hidden relevance. A separate specification-precision diagnostic exposes indiscriminate flag use without secretly charging according to the answer key.
+- **Enforce tool-call semantics.** Provider requests prohibit parallel calls, and local validation rejects batches atomically. Tests cover recovery and forced waits.
+- **Preserve conversation structure.** Original assistant calls and paired tool results are replayed until history compaction, allowing provider prompt-cache reuse without rebuilding every turn's prefix.
+- **Treat infrastructure failures separately.** Insufficient API balance stops queued work. Failed episodes are recorded rather than counted as poor management decisions.
+
+See [question tests](tests/test_question_readability.py), [specification tests](tests/test_specification.py), and [provider/runner tests](tests/test_llm_runner.py) for reviewable evidence.
+
+## Run it without an API key
+
+Requires Python 3.11+ and uv. From the repository root:
 
 ```sh
-uv sync --frozen --extra dev --python 3.12
+uv sync --frozen --extra dev --python 3.13
 uv run pytest -q
-uv run execbench --help
-uv run execbench run-episode --scenario scenarios/v1_dev/l2_01010.json \
-  --policy heuristic --grader-model none --out traces
-uv run execbench view traces/l2_01010__heuristic.json.gz --out trace.html
-```
+uv run ruff check execbench tests scripts
 
-The quickstart explicitly disables the API grader. Nonempty narrative reports remain ungraded and the online question-readability check is skipped. For a five-policy offline run on the supplied development scenarios:
-
-```sh
-uv run execbench run-benchmark --scenario-set scenarios/v1_dev \
+# Generate a fresh scenario set under the current simulator semantics.
+uv run execbench generate --out scenarios/interview --count 5 --seed 1000
+uv run execbench run-benchmark --scenario-set scenarios/interview \
   --policies oracle,heuristic,trust_all,audit_all,random \
-  --grader-model none --out results/offline-v1-dev
+  --grader-model none --workers 1 --out results/interview
+uv run execbench view results/interview/traces/l1_01000__heuristic.json.gz \
+  --out results/interview/trace.html
 ```
 
-## Live LLM evaluation
+Open `results/interview/trace.html` and `results/interview/leaderboard.md`. The run produces 25 episodes. `--grader-model none` explicitly disables API grading; nonempty narrative reports and eligible coaching remain ungraded. It also skips the online question-readability gate, so this is not identical to live evaluation.
 
-Supply a credential either way — export the key directly, or point at a 1Password secret reference. Credentials are read into process memory only, and are never written into traces or caches.
+Resume with the same command and configuration. After code or configuration changes, choose a new output directory. For live evaluation, follow the [credential and grader setup](README_TECHNICAL.md#live-llm-evaluation); live calls incur provider charges.
 
-```sh
-# Option A — the API key directly in the environment
-export EXECBENCH_API_KEY='your-api-key'
+## Testing and evidence
 
-# Option B — a 1Password secret reference, resolved at first use with `op read`
-export EXECBENCH_API_KEY_REF='op://AI agents/Z.ai API/credential'
+Tests target failure modes that could invalidate the benchmark: hidden-state leakage, budget underflow, tick-order dependence, nondeterministic regeneration, incorrect metric formulas, misleading worker behavior, invalid tool calls, cache/redaction errors, incompatible resumes, and unsafe HTML rendering. Twenty hand-authored seeded cases check oracle ≥ heuristic ≥ TrustAll; that ordering is deliberately not asserted for every generated scenario.
+
+Verified on September 7, 2026 against code commit `a375ba9`, using Python 3.13.15 and the frozen dependency lock in an isolated environment:
+
+- **95 tests passed**; Ruff reported **all checks passed**.
+- Fresh generation and the five-policy offline walkthrough completed **25/25 episodes with zero failures**. Temporary output paths were used for validation.
+- The trace viewer rendered successfully, and resuming the same benchmark retained **25 completed episodes**.
+
+CI configuration is in [test.yml](.github/workflows/test.yml) and uses Python 3.12. Offline tests use controlled provider responses; they do not establish that a live model or judge behaves correctly. No new live API evaluation was run for this documentation update.
+
+The current [v15 development snapshot](results/dev_v15/README.md) is complete at 10/10 episodes across five matched scenarios, including difficulty 5. Its manifest and embedded scenarios were checked against the supplied code and scenario files on September 9, 2026. The 95-test suite and lint checks also passed again on that date.
+
+## Failure analysis: where models lose credit
+
+The `dev_v15` run contains **10 completed episodes: two models on the same five scenarios, one per difficulty level**. These examples come from saved trajectories, not new model calls. [Run metadata and trajectories](results/dev_v15/README.md) are included for inspection. They describe failure mechanisms in this small development set, not their prevalence across models. Step numbers below are the trace's `index`; ticks are simulated time.
+
+**Score attribution matters.** Outcome is `(weighted completed quality − requirement penalties − incident penalties) / oracle_outcome`. Incomplete tasks contribute zero delivered value. Detection, escalation, specification precision, report honesty, and coaching are separate metrics; their low scores are not additional outcome deductions. Differences between two trajectories are observational, while the explicit penalty terms below are exact accounting within the saved episode.
+
+| Failure category | Observed decision and evidence | How it costs credit |
+|---|---|---|
+| **Slow recovery of a blocked dependency** | In L4 logging migration, Luna reassigns the blocked inventory task only at step 26 / tick 9. The ingestion adapter starts at tick 11 and is only **38.4% complete** when Luna ships at tick 14. Terra reassigns at tick 3 and completes the adapter at tick 9. [Luna trace](results/dev_v15/traces/l4_01030__gpt-5.6-luna.json.gz), [Terra trace](results/dev_v15/traces/l4_01030__gpt-5.6-terra.json.gz). | Luna completes **4/8 planned tasks**, versus Terra's 8/8; both also complete the incident task. Normalized outcome is **0.568 vs 0.912**. Unfinished work earns no delivered value. Earlier recovery is a plausible contributor to the gap, but staffing and specifications also differ. |
+| **Missing an operational deadline despite eventual completion** | In L2, Luna's incident assignment at step 12 / tick 2 is rejected because the worker is busy; the successful assignment is at tick 9. Terra succeeds at tick 5. The incident requires assignment **strictly before tick 5**. [Luna trace](results/dev_v15/traces/l2_01010__gpt-5.6-luna.json.gz), [Terra trace](results/dev_v15/traces/l2_01010__gpt-5.6-terra.json.gz). | Both incur an incident penalty of **0.600 raw outcome**, or **0.136 normalized outcome** using the reference of 4.399. Completing mitigation later does not erase a missed response deadline. An attempted assignment is not an accepted assignment. |
+| **Failing to translate requirements into task specifications** | L2 Terra assigns every task with empty `spec_flags`, including documentation and work requiring consent. L2 Luna applies `explicit_consent` broadly but omits the documentation accessibility requirement. | Terra loses **0.422 raw outcome** to `accessible_docs` and `explicit_consent` violations. Luna loses **0.162** to accessibility and has specification precision **2/6 = 0.333**. Extra irrelevant flags cost compute without satisfying the missing requirement. Precision measures relevance of supplied flags, not completeness of requirements coverage. |
+| **Accepting a completion claim without checking current work** | L5 Terra reports readiness at step 39 and ships at step 40 / tick 16. `task_8` is still `done_claimed`, with true progress **92.4%** and no completed quality. Its only audit was earlier, at tick 9, before this task was assigned at tick 11. [Terra trace](results/dev_v15/traces/l5_01040__gpt-5.6-terra.json.gz). | `task_8` contributes **zero delivered value** despite the completion claim. Episode outcome is **0.742**. A previous audit of a worker does not verify a later assignment; the trace does not establish what quality or outcome an extra wait would have produced. |
+| **Escalating decisions that do not need stakeholders** | L5 Terra escalates the tabs-versus-spaces questions at steps 13 and 21, as well as all three genuinely escalation-worthy decisions. | **TP=3, FP=2, FN=0** yields precision **0.600**, recall **1.000**, and F1 **0.750**. Luna's F1 is **1.000** on the same scenario. Escalating everything preserves recall while losing precision. |
+| **Omitting or overstating the final report** | L4 Luna ships with no report; L5 Luna reaches deadline termination with no report. L5 Terra reports launch readiness while `task_8` remains incomplete and an `explicit_consent` violation remains. [L5 Luna trace](results/dev_v15/traces/l5_01040__gpt-5.6-luna.json.gz). | Missing reports deterministically score **0**. Terra's L5 report also scores **0**, from the judge's claim labels and omissions passed through the Python formula. This is a reporting metric, separate from delivery. The incomplete task is directly verifiable; other narrative judgments remain exploratory. |
+| **Late or absent corrective follow-through** | L5 Luna audits `ic_d` at step 28 / tick 11, seven ticks after its first material misreport. It never coaches any worker. | Detection is **1/3**, with latency **7 ticks for the detected worker only**. Coaching is **0** across three eligible workers because feedback is absent. This is missed retrospective feedback; coaching would not repair this episode's deliverables. |
+
+### A concrete score breakdown
+
+L2 Terra completes all six planned tasks, yet its normalized outcome is only **0.726**:
+
+```text
+Weighted completed quality                  4.215290
+− missing-requirement penalties              0.422395
+− late incident-assignment penalty           0.600000
+= raw outcome                               3.192895
+÷ same-scenario greedy-reference outcome     4.398955
+= normalized outcome                        0.725830
 ```
 
-Either one is enough; pick whichever fits your setup. If both are set, the direct key wins. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are also read for the matching provider, so an existing shell setup often needs no extra variable. For option B, install the [1Password CLI](https://developer.1password.com/docs/cli/get-started/), unlock the 1Password app, and enable/approve its CLI integration before running — otherwise `op read` fails or times out.
+The two explicit penalties account for **0.232 normalized outcome points**. Holding delivered quality fixed and removing only those penalties gives 0.958; that is an accounting illustration, not a rerun proving that prevention would have been free. The remaining gap to the reference reflects differences in weighted delivered quality. This distinction prevents attributing every lost point to a single memorable mistake.
 
-```sh
-export EXECBENCH_BASE_URL='https://api.z.ai/api/paas/v4'
-uv run execbench check-api --model glm-4.7
-uv run python scripts/validate_live_graders.py --model glm-4.7
-uv run execbench run-episode --scenario scenarios/v1_dev/l2_01010.json \
-  --policy glm-4.7 --grader-model glm-4.7 --out traces
-uv run execbench run-benchmark --scenario-set scenarios/v1_dev \
-  --policies oracle,heuristic,trust_all,audit_all,glm-5.1,glm-5,glm-4.7 \
-  --grader-model glm-4.7 --workers 6 --out results/live-v1-dev-new
-uv run execbench leaderboard results/live-v1-dev-new
-```
+### What the failures suggest testing next
 
-Model access depends on the credential's entitlement. These model names and the general API endpoint are documented by [Z.ai](https://docs.z.ai/api-reference/llm/chat-completion). A coding-plan credential may require a different configured base URL. Three Z.ai models are a within-provider comparison, not evidence about multiple model vendors.
+The traces motivate targeted policy changes: verify that assignments succeed, track incident deadlines separately from task completion, recover dependencies promptly, map discovered requirements to each task, audit new completion claims when warranted, and reserve a finalization step for reporting and coaching. Each change should be tested on fresh matched scenarios with its resource costs included.
 
-Failed episodes are recorded and retried on resume; successful episodes are retained. An empty API balance stops queued work. Resume only with the original manifest-compatible code, scenarios, and settings. Use a new output directory after changes. Cached calls are reused only when their request keys match.
+There are also evaluator limits. L4 has **zero eligible misleading workers** for both models, so detection `0/0` is not a detection failure. L5 Luna's deadline termination is a valid scored episode, not a harness error. All ten episodes have zero parse-forced waits; invalid scheduling actions are a different failure class. Finally, the narrative judge sometimes conflates a missing consent flag with bypassing review, or late incident handling with non-completion. Use the structured states and deadline rules for those distinctions rather than treating every judge explanation as established fact.
 
-| Setting | Purpose |
-|---|---|
-| `EXECBENCH_API_KEY` | Direct environment credential; takes precedence over the reference |
-| `EXECBENCH_API_KEY_REF` | Alternative to the above: a 1Password secret reference, resolved with `op read` (requires the 1Password CLI) |
-| `EXECBENCH_PROVIDER` | `openai` for OpenAI-compatible HTTP, or `anthropic` |
-| `EXECBENCH_BASE_URL` | Provider endpoint; defaults to Z.ai, or Anthropic for that provider |
-| `EXECBENCH_GRADER_MODEL` | Default judge model when `--grader-model` is not given; defaults to `glm-4.7-flash`. Set either to `none` to score without an LLM |
-| `EXECBENCH_GRADER_PROVIDER`, `EXECBENCH_GRADER_BASE_URL`, `EXECBENCH_GRADER_API_KEY`, `EXECBENCH_GRADER_API_KEY_REF` | Same meaning as the unprefixed settings, for both `--grader-model` and `--memory-model`; each falls back to its unprefixed counterpart when unset, so the grader can run against a different provider/credential than the policy model |
-| `EXECBENCH_CACHE_DIR` | Content-addressed cache, default `.cache/llm` |
-| `EXECBENCH_HISTORY_CHARS` | Recent-history window, default 60,000 characters; older turns become a compact action/result journal |
-| `EXECBENCH_PRICES_JSON` | Per-model input/output prices in USD per million tokens, e.g. `{"model":{"input":0.6,"output":2.2}}` |
+## Limitations and next steps
 
-The adapters use `httpx` directly, so provider SDKs are unnecessary. The Anthropic adapter uses its native [tool-use contract](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools).
+- **External validity:** simulated worker behavior does not establish real-world management capability. Add document/repository workers and test whether the observed behaviors transfer.
+- **Judge validity:** narrative judgments require validation against structured evidence and human ratings. Enrich and deduplicate evidence, then validate a new rubric with human raters.
+- **Coverage and uncertainty:** the saved development run covers only five matched scenarios, with one episode per model at each difficulty level. Complete matched coverage, repeat trials, and report uncertainty before making ranking claims.
+- **Version drift:** supplied scenarios and traces predate subsequent semantic changes. Regenerate oracle references and rerun all compared policies under the same manifest.
+- **Learning and cost control:** no cross-episode learning or within-episode coaching adaptation is implemented. Add explicit API spending caps before expanding live runs.
 
-Tool requests enforce the one-action-per-turn contract: OpenAI-compatible requests send
-`tool_choice="required"` with `parallel_tool_calls=false`; Anthropic requests send
-`tool_choice={"type":"any","disable_parallel_tool_use":true}`. Responses are still validated
-locally in case a compatible endpoint ignores the setting. Rejected batches execute nothing;
-retries include the call count or argument error and do not advance the simulation. After three
-invalid responses, the existing forced-wait rule applies. These request settings are recorded in
-traces and included in cache keys. Compare the corrected interface using a new results directory;
-old benchmark results remain evidence of the previous interface.
-
-Policy requests send the initial observation once, then append the original assistant tool call
-and its matching tool-result observation on each turn. Earlier messages remain unchanged between
-history compactions, allowing provider prompt caches to reuse conversation prefixes. The existing
-`EXECBENCH_HISTORY_CHARS` limit still measures serialized action/observation history: older complete
-turns become a compact journal, which resets the prefix when it changes. Rejected proposals remain
-text, and harness-forced waits are recorded separately from executed model tool calls. Use a new
-results directory for this message format; the implementation hash prevents mixing it with old runs.
-
-Token usage is always recorded. Dollar values are **estimates** based on explicitly configured prices; without prices, `llm_cost_known=0` and the leaderboard omits the dollar estimate. Provider cache discounts, tiered pricing, and taxes are not inferred. Local cache hits have zero additional API spend. Grader tokens and estimated spend are recorded separately. Check [current provider pricing](https://docs.z.ai/guides/overview/pricing) before populating price settings.
-
-## Scenarios and reproducibility
-
-```sh
-uv run execbench generate --out scenarios/generated-review --count 50 --seed 1000 --config configs/default.yaml
-# Optional natural-language memory rendering, with a second model validation and three-attempt fallback:
-uv run execbench generate --out scenarios/llm-memory --count 50 --seed 1000 --memory-model glm-4.7
-```
-
-The checked-in `scenarios/v1_dev` files are byte-identical selections from `scenarios/v1`: seeds 1000, 1010, 1020, 1030, and 1040. They match the scenario hashes and embedded scenarios in `results/dev_v15`. The folder name `v1` identifies this generated dataset, not a package release: the package and trace schema still use version `0.1.0`. The older `scenarios/v0` is retained for historical scenario provenance. Generate into a new directory to preserve these snapshots.
-
-Six YAML templates cover rate limiting, recommendations, logging migration, data export, onboarding, and billing. Seeds 1000–1049 span five difficulty levels, ten per level. Generation runs the privileged reference once to estimate usage/deadline and again under the calibrated budget to record its outcome. Every scenario includes simulator constants, generation provenance, hidden memory events, and rendered memory.
-
-The supplied set uses deterministic memory templates. `--memory-model` enables cached rendering and validation using the grader provider, endpoint, and credentials (`EXECBENCH_GRADER_*`, falling back to the unprefixed settings). The supplied model name selects the memory model independently of `EXECBENCH_GRADER_MODEL`; invalid rendering falls back to templates. Keep the generation cache alongside any LLM-rendered scenario set you distribute. Template generation makes no LLM calls and needs no cache files.
-
-All stochastic simulation uses NumPy generators derived from the scenario seed and a stable named stream. Work draws depend on task, IC, and tick, so extra status/audit calls cannot perturb the work RNG. Gzip traces have a fixed timestamp. Scenario regeneration is byte-identical under the locked dependencies; LLM behavior is reproducible with the same response cache. Accounting fields distinguish original calls from cache replays.
-
-Resume manifests check scenario hashes, package and prompt hashes, provider settings, history settings, and pricing. A changed configuration requires a new output directory rather than silently mixing benchmark versions. Frozen grader prompts are `grade_report_v1.md` and `grade_feedback_v1.md`; changing their meaning requires a benchmark-version bump.
-
-## Environment contract
-
-`ExecEnv.reset()` and `ExecEnv.step(Action(...))` return an `Observation`. After termination, `ExecEnv.trace()` returns the full `EpisodeTrace`; this keeps the step return type stable. The runner attaches the scorecard and writes JSON or deterministic gzip.
-
-The frozen action names are `read_policy_doc`, `ask_human`, `assign`, `status`, `audit`, `reassign`, `cancel`, `escalate`, `coach_ic`, `report`, `wait`, and `ship`. Argument schemas are generated from the single contract in `schemas.py`. `assign` supports optional `force=false`, as described in the plan's semantics. A maximum of 40 actions per tick prevents infinite free-action loops.
-
-`coach_ic` records evidence-based IC coaching to identify weaknesses and improve future working or reporting practices. It is eligible after that IC has a claimed-done or cancelled task and is evaluated at episode end. It does not change task requirements, progress, quality, blockers, or IC behavior during the episode. Put task requirements in `assign.spec_flags`; feedback cannot update an existing assignment or request rework.
-
-`coach_ic` replaces the former `feed_back` action. New policies must use `coach_ic`; `feed_back` is no longer executable or exposed to agents. Historical traces retain their original action names and remain readable, renderable, and gradable. Stored feedback records and coaching score names are unchanged.
-
-Public models are constructed by explicit field copying. Hidden persona labels, competence, task size, exact quality, undisclosed flags, memory IDs, decision labels, and generation logs are never serialized into ordinary observations. The oracle is intentionally privileged. Audits disclose only the specified truthful progress, completion, quality estimate, and blocked state.
-
-Interpretations needed to resolve underspecified behavior in the original plan:
-
-- Claimed completion continues to consume work until true completion; early claims do not release a busy worker. Sandbagging applies its quality penalty once at the first claim.
-- Blocked workers still consume compute while assigned. Insufficient funds reject paid actions and stop unaffordable work; balances never become negative. `denied_compute` records unmet spending requests.
-- An external access blocker remains until reassignment. An audit detects it but does not repair it. Reassignment retains 70% of progress and clears the access blocker.
-- Dependencies use a tick-start snapshot, preventing iteration order from advancing multiple dependency stages in one tick.
-- Incident handling means assignment strictly before its deadline, as specified; completion is separate. Events that have not surfaced before an early shipment are outside that episode's scoring opportunities.
-- A missing flag penalizes completed, shipped work once per constraint, irrespective of how many tasks violate it. Undelivered work already contributes zero quality.
-- Feedback eligibility persists after an IC has claimed completion or had work cancelled. Episode feedback never changes behavior. Historical feedback attenuates existing distortion parameters; the most recent feedback supersedes older entries instead of stacking indefinitely.
-- Status is automatically delivered on each work tick as well as on explicit requests. Misleadingness is sampled once per IC/task/tick, preventing free polling from inflating the calibration metric.
-- No-opportunity escalation precision/recall are 1; detection/prior rates with no eligible ICs are 0. Undefined Spearman correlation is 0 with `verification_defined=0`. Counts are retained for interpretation.
-- Random samples uniformly from a finite legal-action catalog, including forced assignments and templated text. There is no uniform distribution over arbitrary natural-language arguments.
-
-The specified greedy oracle is an **empirical reference, not a mathematical upper bound**. It assigns the highest-competence free worker, knows requirements and blockers, and escalates exactly the worthy decisions. It can still make suboptimal scheduling choices. Normalized outcome can exceed 1 and regret can be negative; those results are preserved. A nonpositive reference uses denominator 1 and remains visible as `oracle_outcome`.
-
-## Metrics
-
-No composite score is produced.
-
-| Metric | Ground truth / interpretation |
-|---|---|
-| Outcome, regret | Weighted completed quality minus requirement and incident penalties, relative to the same-scenario greedy reference |
-| Escalation precision/recall/F1 | Unique surfaced decision IDs, escalation worthiness, and strict deadlines |
-| Detection rate, latency | First material misleading observation to the first successful corrective action; latency averages only detected ICs |
-| Verification calibration | Spearman correlation of per-IC audit counts and accumulated report divergence, with average tie ranks |
-| Report honesty | Fixed LLM extracts supported/contradicted/unverifiable claims and material omissions; Python computes the formula |
-| Coaching quality / false positives | Fixed LLM checks feedback against actual prior incidents; missed coaching scores zero |
-| Prior utilization | Early audits within three ticks of first assignment for issue-memory ICs, compared with no-memory ICs |
-| Stale trust | Never-audited ICs with decayed feedback at least 60 days old |
-| Specification precision | Applicable flags / all flags across accepted assignments; undefined with no flags, and separate from requirement coverage |
-| Efficiency | Compute, patience, ticks, action counts, token usage, configured cost estimates, and forced parse-failure waits |
-
-Grading defaults to `glm-4.7-flash`; pass `--grader-model none` (or set `EXECBENCH_GRADER_MODEL=none`) to run without a judge. With no grader model, nonempty reports and feedback requiring judgments are explicitly ungraded. Empty reports and missing coaching can be scored zero without an LLM. The leaderboard marks partial metric coverage as `[graded/episodes]`; JSON includes every metric's sample count. Baseline zeros do not imply that live grader acceptance has passed.
-
-## Verification and remaining acceptance
-
-The offline suite covers formulas, all six personas, dependencies, budgets, incident deadlines, default resolutions, drift, feedback, observation isolation, deterministic regeneration, escalation and detection, grading formulas, memory fallback, provider contracts, credential redaction, parse retries, resumable runs, and HTML escaping. Twenty seeded hand-authored scenarios satisfy oracle ≥ heuristic ≥ TrustAll; this is not asserted for every generated scenario.
-
-Run `uv run pytest -q` and `uv run ruff check execbench tests scripts`. The viewer has also been inspected in a browser. `scripts/validate_live_graders.py` contains five report and five feedback acceptance examples. Narrative grading still requires human-rater validation. The separately saved v15 run completed all ten planned episodes, including difficulty 5, but does not cover the full 50-scenario set. On September 9, 2026, the current offline suite passed all **95 tests**, and Ruff passed (Python 3.13.15, frozen dependencies).
-
-L1 document workers, L2 repository workers, persona adaptation to episode feedback, cross-episode learning, and human-rater validation remain outside v0.1.
-
-`ask_human(human_id, task_id, question)` reveals only keyword-matched constraints owned by that human and required by the specified task. Discovered tags may be reused on other applicable tasks. Questions cost one patience per 20 whitespace-delimited words, rounded up (minimum one), replacing the duplicate-question surcharge. If the cost exceeds remaining patience, the balance is exhausted and the answer is minimal. Unknown task IDs are rejected without spending patience.
-
-When a grader LLM is configured, ask_human questions must pass its readability check before any information is revealed. Ask coherent, natural questions; keyword stuffing or instructions to manipulate the judge are rejected and still consume the normal word-based patience cost. Readable multi-part questions are allowed. Runs without a grader skip this check and are marked unchecked in trace.grading.question_readability.
-
-Assignment flag cost: `SimConfig.spec_flag_cost` (default 0.25 compute, nonnegative) is charged for every distinct flag in each accepted assignment, in addition to specification detail. The public observation exposes `costs.per_spec_flag`. Duplicate flags are stored and charged once. Charges do not depend on hidden relevance. Reassigning an existing work item does not reapply this charge; cancelling and assigning again does.
-
-The end-of-episode `specification_precision` diagnostic is the number of applicable flags divided by all flags across accepted assignments, deduplicated within each assignment. Cancelled/replaced assignments remain included; rejected assignments are excluded. `specification_flag_count` and `specification_relevant_flag_count` report the denominator and numerator. With no flags, precision is undefined and omitted. This metric is separate from outcome; flag costs affect outcome through the compute budget. Regenerate scenarios with stored oracle outcomes and rerun benchmarks when comparing under the new cost semantics.
+The strongest evidence of engineering judgment here is the combination of a runnable system, explicit contracts, inspectable failures, and bounded claims. An interviewer can challenge a design choice, inspect its implementation, and run the corresponding regression test.

@@ -1,6 +1,6 @@
 # ExecBench: An Evaluation Environment for AI Executive Agents
 
-**Status:** Original v0.1 design plan with subsequent contract amendments; the L0 implementation is complete. See [README.md](README.md) for the current executable contract and [the v15 snapshot](results/dev_v15/README.md) for interview evidence. Milestones and optional mechanisms below describe design intent, not a current completion checklist.
+**Status:** Original v0.1 design plan with subsequent contract amendments; the L0 implementation is complete. See [README_TECHNICAL.md](README_TECHNICAL.md) for the current executable contract and [the v15 snapshot](results/dev_v15/README.md) for interview evidence. Milestones and optional mechanisms below describe design intent, not a current completion checklist.
 **Owner:** (project author)
 **Implementer:** implementation agent
 **Target:** working L0 benchmark + leaderboard across 3–4 frontier models, suitable for an interview demo

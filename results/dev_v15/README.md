@@ -1,8 +1,8 @@
 # Interview snapshot: dev_v15
 
-This saved run contains **10 completed episodes, zero failed attempts**: `gpt-5.6-luna` and `gpt-5.6-terra` each evaluated once on five matched scenarios, one per difficulty level. Model identifiers are those recorded in the run; no new model calls were made to prepare this folder for sharing.
+This saved run contains **10 completed episodes, zero failed attempts**: `gpt-5.6-luna` and `gpt-5.6-terra` each evaluated once on five matched scenarios, one per difficulty level. The policy models use the OpenAI endpoint, while the shared `GLM-5.3-Flash` grader uses Z.ai’s endpoint. Model identifiers are those recorded in the run; no new model calls were made to prepare this folder for sharing.
 
-Start with the [comparison viewer](luna_vs_terra.html) (download and open locally), the [leaderboard](leaderboard.md), and the [failure analysis](../../README_INTERVIEW.md#failure-analysis-where-models-lose-credit).
+Start with the [comparison viewer](luna_vs_terra.html) (download and open locally), the [leaderboard](leaderboard.md), and the [failure analysis](../../README.md#failure-analysis-where-models-lose-credit).
 
 | Difficulty / scenario | Luna trajectory | Terra trajectory |
 |---|---|---|

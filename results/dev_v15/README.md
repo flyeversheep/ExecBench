@@ -16,8 +16,7 @@ Scores are normalized outcomes from [the saved episode scores](scores.jsonl), wi
 
 This saved run contains **10 completed episodes, zero failed attempts**: `gpt-5.6-luna` and `gpt-5.6-terra` each evaluated once on five matched scenarios, one per difficulty level. The policy models use the OpenAI endpoint, while the shared `GLM-5.3-Flash` grader uses Z.ai’s endpoint. Model identifiers are those recorded in the run; no new model calls were made to prepare this folder for sharing.
 
-Start with the trace viewer below (download and open locally), the [leaderboard](leaderboard.md), and the [failure analysis](../../README.md#failure-analysis-where-models-lose-credit).
-
+Trace viewer below (download and open locally)
 | Difficulty / scenario | Luna trajectory | Terra trajectory |
 |---|---|---|
 | 1 / l1_01000 | [HTML viewer](traces/l1_01000__gpt-5.6-luna.html) | [HTML viewer](traces/l1_01000__gpt-5.6-terra.html) |
@@ -26,7 +25,7 @@ Start with the trace viewer below (download and open locally), the [leaderboard]
 | 4 / l4_01030 | [HTML viewer](traces/l4_01030__gpt-5.6-luna.html) | [HTML viewer](traces/l4_01030__gpt-5.6-terra.html) |
 | 5 / l5_01040 | [HTML viewer](traces/l5_01040__gpt-5.6-luna.html) | [HTML viewer](traces/l5_01040__gpt-5.6-terra.html) |
 
-
+Full [leaderboard](leaderboard.md), and the [failure analysis](../../README.md#failure-analysis-where-models-lose-credit).
 
 ## Provenance and interpretation
 

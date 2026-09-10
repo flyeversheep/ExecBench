@@ -61,53 +61,23 @@ The agent's tools include stakeholder questions, assignments, audits, reassignme
 
 For this documentation update, Codex assisted with source inspection, drafting, and running the checks reported below. The descriptions of the implementation are grounded in repository evidence; this walkthrough does not reconstruct the original development prompts or attribute every implementation decision to a particular tool.
 
-## Execution: changes that make the benchmark more credible
+## Execution: removing failures unrelated to model capability
 
-The commit history and tests show concrete iteration on the evaluation contract:
+The [outcome calculation](execbench/graders/outcome.py) provides a concrete way to examine how the benchmark evaluates requirement discovery: **outcome = (weighted completed quality − requirement penalties − incident penalties) / greedy-oracle reference**. A completed task can still trigger a penalty if its assignment omits a required specification tag. To avoid that loss, the agent must discover requirements from the policy document or, when they are missing there, ask stakeholders useful clarifying questions, then include the applicable tags in `assign.spec_flags` before work begins. Asking alone does not update the assignment. This connects **clarification → correct task specifications → delivered outcome**, making requirement discovery consequential for a high score, alongside execution quality and incident handling.
 
-- **Constrain information gathering.** Human questions are scoped to a task, cost patience by word count, and, with a configured judge, must pass a readability check before revealing information. Offline runs explicitly leave that check unchecked.
-- **Price over-specification.** Distinct assignment flags consume compute regardless of hidden relevance. A separate specification-precision diagnostic exposes indiscriminate flag use without secretly charging according to the answer key.
-- **Enforce tool-call semantics.** Provider requests prohibit parallel calls, and local validation rejects batches atomically. Tests cover recovery and forced waits.
-- **Preserve conversation structure.** Original assistant calls and paired tool results are replayed until history compaction, allowing provider prompt-cache reuse without rebuilding every turn's prefix.
-- **Treat infrastructure failures separately.** Insufficient API balance stops queued work. Failed episodes are recorded rather than counted as poor management decisions.
+Reviewing early rollouts, I used this mechanism to look for two threats to the evaluation: models losing credit because the interface was unclear, and models obtaining or applying tags through shortcuts that required little judgment. The following four changes aim to make that path from questions to outcome more credible: clarify the tool-call contract, distinguish coaching from specification changes, make discovery selective, and expose indiscriminate tagging.
 
-See [question tests](tests/test_question_readability.py), [specification tests](tests/test_specification.py), and [provider/runner tests](tests/test_llm_runner.py) for reviewable evidence.
+1. **Make general instructions explicit so interface mistakes do not dominate the comparison.** Models should understand the action contract before being evaluated on their decisions. I emphasized **exactly one tool call per turn** in the system prompt, disabled parallel calls in OpenAI API requests, and made retry feedback explain that a rejected batch executed nothing and did not advance the simulation. Local validation still enforces the rule, and repeated invalid responses eventually force a wait. The intent was to reduce avoidable losses on a procedural requirement that does little to differentiate management ability. See [the single-tool-call contract change](https://github.com/flyeversheep/ExecBench/commit/233738d212560ec1b5aae7fbf5c62687ed318bd9).
 
-## Run it without an API key
+2. **Distinguish retrospective coaching from intervention in current work.** Some rollouts used `feed_back` to send new requirements or request revisions, although the action only recorded post-hoc feedback to an individual contributor (IC). The model could appear to intervene while leaving the task unchanged and missing credit for the required action. I renamed it `coach_ic` and clarified its description, errors, and return value: coaching is evaluated at episode end and does not change specifications, progress, quality, blockers, or worker behavior during the episode. Requirements belong in `assign.spec_flags`; operational intervention must use the applicable task actions. This makes the interface better reflect the behavior the simulator actually supports. See [the coaching semantics change](https://github.com/flyeversheep/ExecBench/commit/c41c4418eed7a8a30d2d0c870eb09ba7b29c85b4).
 
-Requires Python 3.11+ and uv. From the repository root:
+3. **Make clarification require selective, well-formed questions.** In the original setup, keyword matches in one broad question could reveal stakeholder constraints across multiple tasks. That made requirement discovery too easy: an agent could pack trigger words into a question instead of deciding which uncertainty was worth resolving. I introduced three complementary constraints: each question targets one task and reveals only matching requirements applicable to it; patience cost grows with question length; and a configured LLM judge rejects incoherent keyword stuffing before disclosure, while still charging patience. The length charge is **one patience per 20 whitespace-delimited words, rounded up**, with a minimum of one—not a model-token count. Together, these changes make both questioning many tasks and packing many topics into one turn more expensive. Discovered tags can still be reused where applicable. See [the task-scoped clarification change](https://github.com/flyeversheep/ExecBench/commit/1e1a2a23a27a76f3d0cdebc0155d1280d0f7fe7c).
 
-```sh
-uv sync --frozen --extra dev --python 3.13
-uv run pytest -q
-uv run ruff check execbench tests scripts
+   I retained keyword-based disclosure as a deliberate tradeoff. It is less realistic and can miss valid paraphrases, but gives benchmark authors explicit control over disclosure triggers. An LLM-based disclosure mechanism could offer higher recall for semantically valid questions, at the cost of less direct control over exactly when specifications are revealed; that benefit has not been measured here. The current hybrid uses the LLM only to assess readability, without exposing hidden constraints to it. It does not eliminate every discovery shortcut, and offline runs without a grader leave readability unchecked.
 
-# Generate a fresh scenario set under the current simulator semantics.
-uv run execbench generate --out scenarios/interview --count 5 --seed 1000
-uv run execbench run-benchmark --scenario-set scenarios/interview \
-  --policies oracle,heuristic,trust_all,audit_all,random \
-  --grader-model none --workers 1 --out results/interview
-uv run execbench view results/interview/traces/l1_01000__heuristic.json.gz \
-  --out results/interview/trace.html
-```
+4. **Measure whether specifications are relevant, not just whether required tags are present.** An agent could otherwise attach every known tag to every assignment and satisfy requirements without mapping them to the work. I added **specification precision**: relevant flags divided by all supplied flags, deduplicated within each accepted assignment. Each distinct flag also incurs a public compute cost regardless of relevance, so indiscriminate tagging consumes resources without the charge revealing hidden requirements. Precision is a separate diagnostic, not an extra outcome penalty or a measure of requirement coverage; it is omitted when no flags are supplied. This makes tag spamming visible while preserving the distinction between unnecessary specifications and missing ones. See [the specification precision change](https://github.com/flyeversheep/ExecBench/commit/ea2598308b56c022caa1a6748cd1889aa1187084).
 
-Open `results/interview/trace.html` and `results/interview/leaderboard.md`. The run produces 25 episodes. `--grader-model none` explicitly disables API grading; nonempty narrative reports and eligible coaching remain ungraded. It also skips the online question-readability gate, so this is not identical to live evaluation.
-
-Resume with the same command and configuration. After code or configuration changes, choose a new output directory. For live evaluation, follow the [credential and grader setup](README_TECHNICAL.md#live-llm-evaluation); live calls incur provider charges.
-
-## Testing and evidence
-
-Tests target failure modes that could invalidate the benchmark: hidden-state leakage, budget underflow, tick-order dependence, nondeterministic regeneration, incorrect metric formulas, misleading worker behavior, invalid tool calls, cache/redaction errors, incompatible resumes, and unsafe HTML rendering. Twenty hand-authored seeded cases check oracle ≥ heuristic ≥ TrustAll; that ordering is deliberately not asserted for every generated scenario.
-
-Verified on September 7, 2026 against code commit `a375ba9`, using Python 3.13.15 and the frozen dependency lock in an isolated environment:
-
-- **95 tests passed**; Ruff reported **all checks passed**.
-- Fresh generation and the five-policy offline walkthrough completed **25/25 episodes with zero failures**. Temporary output paths were used for validation.
-- The trace viewer rendered successfully, and resuming the same benchmark retained **25 completed episodes**.
-
-CI configuration is in [test.yml](.github/workflows/test.yml) and uses Python 3.12. Offline tests use controlled provider responses; they do not establish that a live model or judge behaves correctly. No new live API evaluation was run for this documentation update.
-
-The current [v15 development snapshot](results/dev_v15/README.md) is complete at 10/10 episodes across five matched scenarios, including difficulty 5. Its manifest and embedded scenarios were checked against the supplied code and scenario files on September 9, 2026. The 95-test suite and lint checks also passed again on that date.
+These changes aim to make scores more informative about management decisions; they do not by themselves establish improved benchmark validity. Regression evidence is available in the [provider/runner tests](tests/test_llm_runner.py), [environment tests](tests/test_environment.py), [question-readability tests](tests/test_question_readability.py), and [specification tests](tests/test_specification.py). Supporting harness changes also preserve assistant/tool conversation structure for prompt-cache reuse and record infrastructure failures separately from scored management failures.
 
 ## Failure analysis: where models lose credit
 
